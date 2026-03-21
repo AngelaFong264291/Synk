@@ -59,6 +59,12 @@ h3 {
   font-size: 1.05rem;
 }
 
+h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+}
+
 p {
   margin: 0;
   color: var(--text-muted);

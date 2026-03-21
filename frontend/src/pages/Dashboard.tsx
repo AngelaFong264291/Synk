@@ -1,5 +1,7 @@
 import { Link } from "react-router-dom";
+import { useState, type FormEvent } from "react";
 import { useAuth } from "../auth/useAuth";
+import { pb } from "../lib/pocketbase";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill } from "../components/StatusPill";
 import { decisions, documents, tasks, workspace } from "../lib/demo-data";
@@ -7,6 +9,122 @@ import { decisions, documents, tasks, workspace } from "../lib/demo-data";
 export function Dashboard() {
   const { model } = useAuth();
   const openTasks = tasks.filter((task) => task.status !== "Done");
+  const [inviteCode, setInviteCode] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [joinStatus, setJoinStatus] = useState("");
+  const [inviteStatus, setInviteStatus] = useState("");
+  const [isJoining, setIsJoining] = useState(false);
+  const [isInviting, setIsInviting] = useState(false);
+  const [teamName, setTeamName] = useState("");
+  const [isCreatingTeam, setIsCreatingTeam] = useState(false);
+  const [createTeamStatus, setCreateTeamStatus] = useState("");
+
+  async function handleCreateTeam(e: FormEvent) {
+    e.preventDefault();
+    setIsCreatingTeam(true);
+    setCreateTeamStatus("");
+
+    try {
+      if (!model?.id) throw new Error("Not logged in");
+
+      // generate a simple random code
+      const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+
+      await pb.collection('teams').create({
+        name: teamName,
+        code: code,
+        owner: model.id
+      });
+
+      setCreateTeamStatus(`Successfully created team: ${teamName} (Code: ${code})`);
+      setTeamName("");
+    } catch (err: any) {
+      console.error(err);
+      setCreateTeamStatus("Failed to create team. Please try again.");
+    } finally {
+      setIsCreatingTeam(false);
+    }
+  }
+
+  async function handleJoinTeam(e: FormEvent) {
+    e.preventDefault();
+    setIsJoining(true);
+    setJoinStatus("");
+
+    try {
+      if (!model?.id) throw new Error("Not logged in");
+      
+      const teams = await pb.collection('teams').getList(1, 1, {
+        filter: `code = "${inviteCode}"`
+      });
+
+      if (teams.items.length === 0) {
+        throw new Error("Team not found with that code");
+      }
+
+      const team = teams.items[0];
+
+      // Check if user is already in the team
+      const existingMembers = await pb.collection('team_members').getList(1, 1, {
+        filter: `team = "${team.id}" && user = "${model.id}"`
+      });
+
+      if (existingMembers.items.length > 0) {
+        setJoinStatus(`You are already a member of team: ${team.name}`);
+        setInviteCode("");
+        return;
+      }
+
+      await pb.collection('team_members').create({ 
+        user: model.id, 
+        team: team.id 
+      });
+
+      setJoinStatus(`Successfully joined team: ${team.name}`);
+      setInviteCode("");
+    } catch (err: any) {
+      console.error(err);
+      setJoinStatus(err.message || "Failed to join team. Please check the code and try again.");
+    } finally {
+      setIsJoining(false);
+    }
+  }
+
+  async function handleSendInvite(e: FormEvent) {
+    e.preventDefault();
+    setIsInviting(true);
+    setInviteStatus("");
+
+    try {
+      if (!model?.id) throw new Error("Not logged in");
+
+      // Assuming the user is part of a team, let's just get their first team for now
+      // A more robust implementation would let them select which team to invite to
+      const myTeams = await pb.collection('team_members').getList(1, 1, {
+        filter: `user = "${model.id}"`
+      });
+
+      if (myTeams.items.length === 0) {
+        throw new Error("You must be part of a team to send invites");
+      }
+
+      const teamId = myTeams.items[0].team;
+
+      await pb.collection('team_invites').create({ 
+        email: inviteEmail, 
+        inviter: model.id,
+        team: teamId
+      });
+
+      setInviteStatus(`An invite has been sent to ${inviteEmail}`);
+      setInviteEmail("");
+    } catch (err: any) {
+      console.error(err);
+      setInviteStatus(err.message || "Failed to send invite. Please try again.");
+    } finally {
+      setIsInviting(false);
+    }
+  }
 
   return (
     <section className="stack-lg">
@@ -97,6 +215,87 @@ export function Dashboard() {
               </p>
             </article>
           ))}
+        </div>
+      </section>
+
+      <section className="stack">
+        <h1>Teams</h1>
+        <p>
+          Manage your teams below. Signed in as <strong>{model?.email ?? model?.id}</strong>
+        </p>
+
+        <div className="two-column">
+          <div className="panel stack">
+            <h2>Create a Team</h2>
+            <form className="stack form" onSubmit={handleCreateTeam}>
+              <label className="field">
+                <span>Team Name</span>
+                <input
+                  type="text"
+                  value={teamName}
+                  onChange={(e) => setTeamName(e.target.value)}
+                  placeholder="e.g. Acme Corp"
+                  required
+                />
+              </label>
+              <button type="submit" disabled={isCreatingTeam || !teamName}>
+                {isCreatingTeam ? "Creating..." : "Create Team"}
+              </button>
+              {createTeamStatus && (
+                <p className={createTeamStatus.startsWith("Failed") ? "error" : "muted"}>
+                  {createTeamStatus}
+                </p>
+              )}
+            </form>
+          </div>
+
+          <div className="panel stack">
+            <h2>Join a Team</h2>
+            <form className="stack form" onSubmit={handleJoinTeam}>
+              <label className="field">
+                <span>Team Code</span>
+                <input
+                  type="text"
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value)}
+                  placeholder="e.g. TEAM-1234"
+                  required
+                />
+              </label>
+              <button type="submit" disabled={isJoining || !inviteCode}>
+                {isJoining ? "Joining..." : "Join Team"}
+              </button>
+              {joinStatus && (
+                <p className={joinStatus.startsWith("Failed") ? "error" : "muted"}>
+                  {joinStatus}
+                </p>
+              )}
+            </form>
+          </div>
+        </div>
+
+        <div className="panel stack" style={{ marginTop: "2rem" }}>
+          <h2>Invite to Team</h2>
+          <form className="stack form" onSubmit={handleSendInvite}>
+            <label className="field">
+              <span>Email Address</span>
+              <input
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="colleague@example.com"
+                required
+              />
+            </label>
+            <button type="submit" disabled={isInviting || !inviteEmail}>
+              {isInviting ? "Sending..." : "Send Invite"}
+            </button>
+            {inviteStatus && (
+              <p className={inviteStatus.startsWith("Failed") ? "error" : "muted"}>
+                {inviteStatus}
+              </p>
+            )}
+          </form>
         </div>
       </section>
     </section>

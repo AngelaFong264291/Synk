@@ -7,7 +7,10 @@ services:
       - '8090:8090'
     volumes:
       - ./pb_data:/pb_data
+      - ./pb_migrations:/pb_migrations
+      - ./pb_hooks:/pb_hooks
     command:
       - serve
       - --http=0.0.0.0:8090
       - --dir=/pb_data
+      - --dev
