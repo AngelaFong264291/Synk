@@ -32,8 +32,17 @@ export function Login() {
   }
 
   return (
-    <section className="stack">
-      <h1>Sign in</h1>
+    <section className="stack-lg">
+      <div className="page-header">
+        <div>
+          <p className="eyebrow">Authentication</p>
+          <h1>Sign in to your workspace</h1>
+          <p className="page-description">
+            Use your PocketBase user account to open the hackathon dashboard and
+            continue the shared demo flow.
+          </p>
+        </div>
+      </div>
       <p className="muted">
         Uses PocketBase <code>users</code> collection. Create an account in the
         admin UI (<code>/_/</code>) first.
@@ -61,7 +70,7 @@ export function Login() {
         </label>
         {error ? <p className="error">{error}</p> : null}
         <button type="submit" disabled={pending}>
-          {pending ? "Signing in…" : "Sign in"}
+          {pending ? "Signing in..." : "Sign in"}
         </button>
       </form>
     </section>

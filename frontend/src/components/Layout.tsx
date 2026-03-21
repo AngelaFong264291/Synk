@@ -3,30 +3,52 @@ import { useAuth } from "../auth/useAuth";
 import "./Layout.css";
 
 export function Layout() {
-  const { isAuthenticated, signOut } = useAuth();
+  const { isAuthenticated, model, signOut } = useAuth();
 
   return (
     <div className="app-shell">
       <header className="app-header">
-        <NavLink to="/" className="brand" end>
-          Synk
-        </NavLink>
-        <nav className="nav">
-          <NavLink to="/" end>
-            Home
+        <div className="header-left">
+          <NavLink to="/" className="brand" end>
+            <span className="brand-mark">S</span>
+            <span>
+              Synk
+              <small>Hackathon MVP</small>
+            </span>
           </NavLink>
-          <NavLink to="/about">About</NavLink>
+          <nav className="nav">
+            <NavLink to="/" end>
+              Home
+            </NavLink>
+            <NavLink to="/about">About</NavLink>
+            {isAuthenticated ? (
+              <>
+                <NavLink to="/dashboard">Dashboard</NavLink>
+                <NavLink to="/workspace">Workspace</NavLink>
+                <NavLink to="/documents">Documents</NavLink>
+                <NavLink to="/tasks">Tasks</NavLink>
+                <NavLink to="/decisions">Decisions</NavLink>
+              </>
+            ) : null}
+          </nav>
+        </div>
+        <div className="header-right">
           {isAuthenticated ? (
             <>
-              <NavLink to="/dashboard">Dashboard</NavLink>
+              <div className="user-chip">
+                <span className="user-chip-dot" />
+                <span>{model?.email ?? "Signed in"}</span>
+              </div>
               <button type="button" className="linkish" onClick={signOut}>
                 Sign out
               </button>
             </>
           ) : (
-            <NavLink to="/login">Sign in</NavLink>
+            <NavLink to="/login" className="button-link">
+              Sign in
+            </NavLink>
           )}
-        </nav>
+        </div>
       </header>
       <main className="app-main">
         <Outlet />
