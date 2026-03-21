@@ -1,0 +1,6 @@
+# Optional Conda env for Node tooling (npm runs the same either way).
+name: synk
+channels:
+  - conda-forge
+dependencies:
+  - nodejs>=20

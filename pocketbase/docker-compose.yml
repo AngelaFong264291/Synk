@@ -1,0 +1,13 @@
+# PocketBase: auth, SQLite-backed API, admin UI at http://127.0.0.1:8090/_/
+# Data persists under ./pb_data (gitignored).
+services:
+  pocketbase:
+    image: ghcr.io/muchobien/pocketbase:latest
+    ports:
+      - '8090:8090'
+    volumes:
+      - ./pb_data:/pb_data
+    command:
+      - serve
+      - --http=0.0.0.0:8090
+      - --dir=/pb_data
