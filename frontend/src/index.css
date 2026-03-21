@@ -113,8 +113,24 @@ code {
   background: rgba(255, 255, 255, 0.9);
 }
 
+.textarea {
+  min-height: 7rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  font: inherit;
+  color: var(--text-strong);
+  background: rgba(255, 255, 255, 0.9);
+  resize: vertical;
+}
+
+.textarea-large {
+  min-height: 15rem;
+}
+
 .field input:focus,
-.field select:focus {
+.field select:focus,
+.textarea:focus {
   outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
   outline-offset: 0;
 }
@@ -389,6 +405,86 @@ ul {
     linear-gradient(180deg, rgba(15, 118, 110, 0.08), rgba(255, 255, 255, 0.9));
 }
 
+.diff-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.stat-card-compact {
+  padding: 1rem;
+}
+
+.diff-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.legend-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.legend-chip-added {
+  color: var(--success);
+  background: rgba(21, 128, 61, 0.12);
+}
+
+.legend-chip-removed {
+  color: var(--danger);
+  background: rgba(180, 35, 24, 0.12);
+}
+
+.legend-chip-neutral {
+  color: var(--text-soft);
+  background: rgba(93, 113, 134, 0.12);
+}
+
+.diff-list {
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid rgba(17, 32, 49, 0.08);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.diff-line {
+  display: grid;
+  grid-template-columns: 3rem 3rem minmax(0, 1fr);
+  gap: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid rgba(17, 32, 49, 0.08);
+}
+
+.diff-line:last-child {
+  border-bottom: none;
+}
+
+.diff-line-added {
+  background: rgba(21, 128, 61, 0.08);
+}
+
+.diff-line-removed {
+  background: rgba(180, 35, 24, 0.08);
+}
+
+.diff-line-number {
+  color: var(--text-soft);
+  font-size: 0.82rem;
+}
+
+.diff-line-code {
+  display: block;
+  padding: 0;
+  background: transparent;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .avatar-row {
   display: grid;
   gap: 0.75rem;
@@ -430,6 +526,7 @@ ul {
   .landing-hero,
   .two-column,
   .diff-grid,
+  .diff-stats,
   .selector-grid,
   .hero-panel,
   .board {
