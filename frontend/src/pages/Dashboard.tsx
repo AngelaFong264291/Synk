@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
-import { pb } from "../lib/pocketbase";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill } from "../components/StatusPill";
 import { useActiveWorkspace } from "../lib/useActiveWorkspace";
@@ -46,122 +45,7 @@ export function Dashboard() {
 
   const { decisions, documents, members, tasks, workspace, source } = data;
   const openTasks = tasks.filter((task) => task.status !== "Done");
-  const [inviteCode, setInviteCode] = useState("");
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [joinStatus, setJoinStatus] = useState("");
-  const [inviteStatus, setInviteStatus] = useState("");
-  const [isJoining, setIsJoining] = useState(false);
-  const [isInviting, setIsInviting] = useState(false);
-  const [teamName, setTeamName] = useState("");
-  const [isCreatingTeam, setIsCreatingTeam] = useState(false);
-  const [createTeamStatus, setCreateTeamStatus] = useState("");
-
-  async function handleCreateTeam(e: FormEvent) {
-    e.preventDefault();
-    setIsCreatingTeam(true);
-    setCreateTeamStatus("");
-
-    try {
-      if (!model?.id) throw new Error("Not logged in");
-
-      // generate a simple random code
-      const code = Math.random().toString(36).substring(2, 10).toUpperCase();
-
-      await pb.collection('teams').create({
-        name: teamName,
-        code: code,
-        owner: model.id
-      });
-
-      setCreateTeamStatus(`Successfully created team: ${teamName} (Code: ${code})`);
-      setTeamName("");
-    } catch (err: any) {
-      console.error(err);
-      setCreateTeamStatus("Failed to create team. Please try again.");
-    } finally {
-      setIsCreatingTeam(false);
-    }
-  }
-
-  async function handleJoinTeam(e: FormEvent) {
-    e.preventDefault();
-    setIsJoining(true);
-    setJoinStatus("");
-
-    try {
-      if (!model?.id) throw new Error("Not logged in");
-
-      const teams = await pb.collection('teams').getList(1, 1, {
-        filter: `code = "${inviteCode}"`
-      });
-
-      if (teams.items.length === 0) {
-        throw new Error("Team not found with that code");
-      }
-
-      const team = teams.items[0];
-
-      // Check if user is already in the team
-      const existingMembers = await pb.collection('team_members').getList(1, 1, {
-        filter: `team = "${team.id}" && user = "${model.id}"`
-      });
-
-      if (existingMembers.items.length > 0) {
-        setJoinStatus(`You are already a member of team: ${team.name}`);
-        setInviteCode("");
-        return;
-      }
-
-      await pb.collection('team_members').create({
-        user: model.id,
-        team: team.id
-      });
-
-      setJoinStatus(`Successfully joined team: ${team.name}`);
-      setInviteCode("");
-    } catch (err: any) {
-      console.error(err);
-      setJoinStatus(err.message || "Failed to join team. Please check the code and try again.");
-    } finally {
-      setIsJoining(false);
-    }
-  }
-
-  async function handleSendInvite(e: FormEvent) {
-    e.preventDefault();
-    setIsInviting(true);
-    setInviteStatus("");
-
-    try {
-      if (!model?.id) throw new Error("Not logged in");
-
-      // Assuming the user is part of a team, let's just get their first team for now
-      // A more robust implementation would let them select which team to invite to
-      const myTeams = await pb.collection('team_members').getList(1, 1, {
-        filter: `user = "${model.id}"`
-      });
-
-      if (myTeams.items.length === 0) {
-        throw new Error("You must be part of a team to send invites");
-      }
-
-      const teamId = myTeams.items[0].team;
-
-      await pb.collection('team_invites').create({
-        email: inviteEmail,
-        inviter: model.id,
-        team: teamId
-      });
-
-      setInviteStatus(`An invite has been sent to ${inviteEmail}`);
-      setInviteEmail("");
-    } catch (err: any) {
-      console.error(err);
-      setInviteStatus(err.message || "Failed to send invite. Please try again.");
-    } finally {
-      setIsInviting(false);
-    }
-  }
+  const completedTasks = tasks.filter((task) => task.status === "Done");
   const summary = createDashboardSummary({
     workspace,
     documents,
@@ -169,9 +53,29 @@ export function Dashboard() {
     decisions,
     members,
   });
+  const totalSnapshots = documents.reduce(
+    (count, document) => count + document.versions.length,
+    0,
+  );
+  const dueTodayTasks = tasks.filter((task) => task.dueDate === "Today");
+  const progressPercent = tasks.length
+    ? Math.round((completedTasks.length / tasks.length) * 100)
+    : 0;
+  const priorityTasks = openTasks.slice(0, 2);
+  const nextUpTasks = openTasks.slice(2, 4);
+  const recentSnapshot = documents
+    .flatMap((document) =>
+      document.versions.map((version) => ({
+        documentTitle: document.title,
+        label: version.label,
+        author: version.author,
+        createdAt: version.createdAt,
+      })),
+    )
+    .at(-1);
 
   return (
-    <section className="stack-lg">
+    <section className="dashboard-shell stack-lg">
       <PageHeader
         eyebrow="Dashboard"
         title={`Welcome back, ${model?.email ?? "teammate"}`}
@@ -201,204 +105,237 @@ export function Dashboard() {
         </div>
       ) : null}
 
-      <div className="stats-grid">
-        <article className="stat-card">
-          <span className="stat-value">{documents.length}</span>
-          <p>Tracked documents</p>
-        </article>
-        <article className="stat-card">
-          <span className="stat-value">{openTasks.length}</span>
-          <p>Open tasks</p>
-        </article>
-        <article className="stat-card">
-          <span className="stat-value">{decisions.length}</span>
-          <p>Key decisions logged</p>
-        </article>
-      </div>
+      <section className="dashboard-hero panel">
+        <div className="dashboard-hero-copy">
+          <p className="eyebrow">Live demo frame</p>
+          <h2>{workspace.name}</h2>
+          <p className="dashboard-hero-text">{workspace.milestone}</p>
+          <div className="dashboard-hero-meta">
+            <span>{members.length} teammates</span>
+            <span>{openTasks.length} active tasks</span>
+            <span>{totalSnapshots} named snapshots</span>
+            <span>Invite code {workspace.inviteCode}</span>
+          </div>
+        </div>
 
-      <div className="two-column">
-        <section className="panel stack">
-          <div className="row space-between wrap">
-            <h2>Project summary</h2>
+        <div className="dashboard-focus-card">
+          <div className="row space-between wrap gap-sm">
+            <strong>Your focus today</strong>
             <StatusPill tone="accent">{workspace.focus}</StatusPill>
           </div>
-          <p>{summary.headline}</p>
-          {summary.narrative.map((sentence) => (
-            <p key={sentence} className="muted">
-              {sentence}
-            </p>
-          ))}
-        </section>
-
-        <section className="panel stack">
-          <div className="row space-between wrap">
-            <h2>Recent decisions</h2>
-            <Link to="/decisions">Open log</Link>
-          </div>
-          {decisions.map((decision) => (
-            <div key={decision.id} className="list-row">
-              <div>
-                <strong>{decision.title}</strong>
-                <p>{decision.owner}</p>
+          <div className="dashboard-focus-strip">
+            <Link className="dashboard-focus-link" to="/documents">
+              Compare latest snapshot
+            </Link>
+            <div className="dashboard-progress">
+              <div className="dashboard-progress-top">
+                <span>{dueTodayTasks.length} tasks due today</span>
+                <strong>{progressPercent}%</strong>
               </div>
-              <span className="muted">{decision.date}</span>
+              <div className="dashboard-progress-bar">
+                <span style={{ width: `${progressPercent}%` }} />
+              </div>
             </div>
-          ))}
-        </section>
-      </div>
-
-      <div className="two-column">
-        <section className="panel stack">
-          <div className="row space-between wrap">
-            <h2>Recent activity</h2>
-            <StatusPill tone="accent">Auto-generated</StatusPill>
           </div>
-          {summary.recentActivity.map((item) => (
-            <article key={`${item.type}-${item.id}`} className="timeline-item">
-              <div className="row space-between wrap gap-sm">
-                <strong>{item.label}</strong>
-                <span className="muted">{item.timestamp}</span>
-              </div>
-              <p>{item.detail}</p>
-              <p className="muted">
-                {item.actor} • {item.type}
-              </p>
-            </article>
-          ))}
+          <p className="muted">{summary.headline}</p>
+        </div>
+      </section>
+
+      <section className="dashboard-kpi panel">
+        <div className="dashboard-kpi-item">
+          <span className="dashboard-kpi-label">Tasks</span>
+          <strong>{tasks.length}</strong>
+        </div>
+        <div className="dashboard-kpi-item">
+          <span className="dashboard-kpi-label">Decisions</span>
+          <strong>{decisions.length}</strong>
+        </div>
+        <div className="dashboard-kpi-item">
+          <span className="dashboard-kpi-label">Docs</span>
+          <strong>{documents.length}</strong>
+        </div>
+        <div className="dashboard-kpi-item">
+          <span className="dashboard-kpi-label">Snapshots</span>
+          <strong>{totalSnapshots}</strong>
+        </div>
+      </section>
+
+      <div className="dashboard-grid">
+        <section className="dashboard-card dashboard-card-wide">
+          <div className="row space-between wrap">
+            <h2>Critical now</h2>
+            <Link to="/tasks">Open task board</Link>
+          </div>
+          <div className="dashboard-checklist">
+            {priorityTasks.map((task) => (
+              <label key={task.id} className="dashboard-check-item">
+                <input type="checkbox" checked={task.status === "Done"} readOnly />
+                <div>
+                  <strong>{task.title}</strong>
+                  <p className="muted">
+                    {task.assignee} • {task.linkedDocument} • due {task.dueDate}
+                  </p>
+                </div>
+                <StatusPill
+                  tone={task.priority === "High" ? "warning" : "accent"}
+                >
+                  {task.priority}
+                </StatusPill>
+              </label>
+            ))}
+          </div>
         </section>
 
-        <section className="panel stack">
+        <section className="dashboard-card">
           <div className="row space-between wrap">
             <h2>Contributors</h2>
             <StatusPill
               tone={summary.overdueTasks.length ? "warning" : "success"}
             >
-              {summary.overdueTasks.length
-                ? `${summary.overdueTasks.length} due today`
-                : "On track"}
+              {summary.overdueTasks.length ? "Needs attention" : "Healthy"}
             </StatusPill>
           </div>
-          <div className="panel-list compact-grid">
-            {summary.contributorStats.map((member) => (
-              <article key={member.name} className="task-card">
-                <div className="row space-between gap-sm">
-                  <strong>{member.name}</strong>
-                  <StatusPill tone="accent">
-                    {member.contributions} updates
-                  </StatusPill>
+          <div className="dashboard-contributors">
+            {summary.contributorStats.map((member) => {
+              const details = members.find((entry) => entry.name === member.name);
+
+              return (
+                <article key={member.name} className="dashboard-contributor">
+                  <div className="dashboard-avatar">
+                    {details?.initials ?? member.name.slice(0, 2).toUpperCase()}
+                  </div>
+                  <div>
+                    <strong>{member.name}</strong>
+                    <p className="muted">{member.contributions} updates</p>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="dashboard-card">
+          <div className="row space-between wrap">
+            <h2>Up next</h2>
+            <StatusPill tone="accent">Ownership</StatusPill>
+          </div>
+          <div className="dashboard-checklist">
+            {nextUpTasks.map((task) => (
+              <label key={task.id} className="dashboard-check-item">
+                <input type="checkbox" checked={false} readOnly />
+                <div>
+                  <strong>{task.title}</strong>
+                  <p className="muted">{task.assignee}</p>
                 </div>
-                <p>{member.focus}</p>
+              </label>
+            ))}
+          </div>
+        </section>
+
+        <section className="dashboard-card dashboard-card-tall">
+          <div className="row space-between wrap">
+            <h2>Version control</h2>
+            <Link to="/documents">Open history</Link>
+          </div>
+          <div className="dashboard-vc-stack">
+            <div className="dashboard-vc-callout">
+              <strong>Latest snapshot</strong>
+              <p>
+                {recentSnapshot
+                  ? `${recentSnapshot.label} on ${recentSnapshot.documentTitle}`
+                  : "No snapshots yet"}
+              </p>
+              <span className="muted">
+                {recentSnapshot
+                  ? `${recentSnapshot.author} • ${recentSnapshot.createdAt}`
+                  : "Create the first named version from a document detail page."}
+              </span>
+            </div>
+            <div className="dashboard-vc-mini-grid">
+              <div className="dashboard-vc-mini">
+                <strong>{totalSnapshots}</strong>
+                <span>Named commits</span>
+              </div>
+              <div className="dashboard-vc-mini">
+                <strong>{documents.length}</strong>
+                <span>Diff-ready docs</span>
+              </div>
+            </div>
+            <ul className="dashboard-mini-list">
+              <li>Named snapshots create clear review checkpoints.</li>
+              <li>Diff compare is ready from the document detail page.</li>
+              <li>Restore points are visible even before full rollback lands.</li>
+            </ul>
+          </div>
+        </section>
+
+        <section className="dashboard-card">
+          <div className="row space-between wrap">
+            <h2>Recent activity</h2>
+            <StatusPill tone="accent">Auto-generated</StatusPill>
+          </div>
+          <div className="dashboard-activity">
+            {summary.recentActivity.slice(0, 4).map((item) => (
+              <article
+                key={`${item.type}-${item.id}`}
+                className="dashboard-activity-item"
+              >
+                <div>
+                  <strong>{item.label}</strong>
+                  <p>{item.detail}</p>
+                </div>
+                <span className="muted">{item.timestamp}</span>
               </article>
             ))}
           </div>
         </section>
+
+        <section className="dashboard-card">
+          <div className="row space-between wrap">
+            <h2>Decision log</h2>
+            <Link to="/decisions">View all</Link>
+          </div>
+          <div className="dashboard-activity">
+            {decisions.slice(0, 3).map((decision) => (
+              <article key={decision.id} className="dashboard-activity-item">
+                <div>
+                  <strong>{decision.title}</strong>
+                  <p>{decision.outcome}</p>
+                </div>
+                <span className="muted">{decision.date}</span>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="dashboard-card">
+          <div className="row space-between wrap">
+            <h2>Deadlines</h2>
+            <StatusPill tone={dueTodayTasks.length ? "warning" : "success"}>
+              {dueTodayTasks.length ? "Due today" : "Clear"}
+            </StatusPill>
+          </div>
+          <div className="dashboard-deadlines">
+            <div className="deadline-group">
+              <strong>Due today ({dueTodayTasks.length})</strong>
+              <p className="muted">
+                {dueTodayTasks.map((task) => task.title).join(", ") ||
+                  "Nothing urgent"}
+              </p>
+            </div>
+            <div className="deadline-group">
+              <strong>Upcoming ({openTasks.length - dueTodayTasks.length})</strong>
+              <p className="muted">
+                {openTasks
+                  .filter((task) => task.dueDate !== "Today")
+                  .map((task) => task.title)
+                  .join(", ") || "No queued work"}
+              </p>
+            </div>
+          </div>
+        </section>
       </div>
 
-      <section className="panel stack">
-        <div className="row space-between wrap">
-          <h2>Execution focus</h2>
-          <Link to="/tasks">See task board</Link>
-        </div>
-        <div className="panel-list compact-grid">
-          {openTasks.map((task) => (
-            <article key={task.id} className="task-card">
-              <div className="row space-between gap-sm">
-                <strong>{task.title}</strong>
-                <StatusPill
-                  tone={task.status === "In Progress" ? "accent" : "neutral"}
-                >
-                  {task.status}
-                </StatusPill>
-              </div>
-              <p>{task.linkedDocument}</p>
-              <p className="muted">
-                {task.assignee} • due {task.dueDate}
-              </p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="stack">
-        <h1>Teams</h1>
-        <p>
-          Manage your teams below. Signed in as <strong>{model?.email ?? model?.id}</strong>
-        </p>
-
-        <div className="two-column">
-          <div className="panel stack">
-            <h2>Create a Team</h2>
-            <form className="stack form" onSubmit={handleCreateTeam}>
-              <label className="field">
-                <span>Team Name</span>
-                <input
-                  type="text"
-                  value={teamName}
-                  onChange={(e) => setTeamName(e.target.value)}
-                  placeholder="e.g. Acme Corp"
-                  required
-                />
-              </label>
-              <button type="submit" disabled={isCreatingTeam || !teamName}>
-                {isCreatingTeam ? "Creating..." : "Create Team"}
-              </button>
-              {createTeamStatus && (
-                <p className={createTeamStatus.startsWith("Failed") ? "error" : "muted"}>
-                  {createTeamStatus}
-                </p>
-              )}
-            </form>
-          </div>
-
-          <div className="panel stack">
-            <h2>Join a Team</h2>
-            <form className="stack form" onSubmit={handleJoinTeam}>
-              <label className="field">
-                <span>Team Code</span>
-                <input
-                  type="text"
-                  value={inviteCode}
-                  onChange={(e) => setInviteCode(e.target.value)}
-                  placeholder="e.g. TEAM-1234"
-                  required
-                />
-              </label>
-              <button type="submit" disabled={isJoining || !inviteCode}>
-                {isJoining ? "Joining..." : "Join Team"}
-              </button>
-              {joinStatus && (
-                <p className={joinStatus.startsWith("Failed") ? "error" : "muted"}>
-                  {joinStatus}
-                </p>
-              )}
-            </form>
-          </div>
-        </div>
-
-        <div className="panel stack" style={{ marginTop: "2rem" }}>
-          <h2>Invite to Team</h2>
-          <form className="stack form" onSubmit={handleSendInvite}>
-            <label className="field">
-              <span>Email Address</span>
-              <input
-                type="email"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                placeholder="colleague@example.com"
-                required
-              />
-            </label>
-            <button type="submit" disabled={isInviting || !inviteEmail}>
-              {isInviting ? "Sending..." : "Send Invite"}
-            </button>
-            {inviteStatus && (
-              <p className={inviteStatus.startsWith("Failed") ? "error" : "muted"}>
-                {inviteStatus}
-              </p>
-            )}
-          </form>
-        </div>
-      </section>
     </section>
   );
 }

@@ -15,6 +15,7 @@ export function Documents() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [pendingCreate, setPendingCreate] = useState(false);
+  const uniqueOwners = new Set(documents.map((document) => document.owner)).size;
 
   useEffect(() => {
     if (!activeWorkspace) {
@@ -95,12 +96,27 @@ export function Documents() {
         title="Documents and version history"
         description={
           activeWorkspace
-            ? `Showing live documents for ${activeWorkspace.name}. Save document versions from the detail page and use Person 3's diff UI there.`
+            ? `Showing live documents for ${activeWorkspace.name}. This space should read like version control for non-developers: named snapshots, compare-ready history, visible ownership, and clear restore points.`
             : "Pick or create a workspace first so documents have a real PocketBase home."
         }
       />
 
       {error ? <p className="error">{error}</p> : null}
+
+      <div className="stats-grid">
+        <article className="stat-card">
+          <span className="stat-value">{documents.length}</span>
+          <p>Tracked documents</p>
+        </article>
+        <article className="stat-card">
+          <span className="stat-value">{documents.length}</span>
+          <p>Snapshot-ready records</p>
+        </article>
+        <article className="stat-card">
+          <span className="stat-value">{uniqueOwners}</span>
+          <p>Visible contributors</p>
+        </article>
+      </div>
 
       <div className="two-column">
         <form className="panel stack" onSubmit={onCreateDocument}>
@@ -140,18 +156,31 @@ export function Documents() {
 
         <section className="panel stack">
           <div className="row space-between wrap">
-            <h2>Workspace status</h2>
+            <h2>Version control checklist</h2>
             <StatusPill tone={activeWorkspace ? "success" : "warning"}>
-              {activeWorkspace ? activeWorkspace.inviteCode : "No workspace"}
+              {activeWorkspace ? "PRD-aligned" : "No workspace"}
             </StatusPill>
           </div>
           {activeWorkspace ? (
             <>
-              <p>{activeWorkspace.description || "No description yet."}</p>
-              <p className="muted">
-                Open a document detail page to save snapshots and compare
-                versions.
-              </p>
+              <div className="feature-checklist">
+                <div className="feature-check">
+                  <strong>Named snapshots</strong>
+                  <p>Save commits from the detail page so every key revision has a readable label.</p>
+                </div>
+                <div className="feature-check">
+                  <strong>Diff compare</strong>
+                  <p>Open any document detail to compare versions with the line-by-line plain-text diff.</p>
+                </div>
+                <div className="feature-check">
+                  <strong>Contributor attribution</strong>
+                  <p>Each document already shows ownership; snapshot authorship is surfaced in version history.</p>
+                </div>
+                <div className="feature-check">
+                  <strong>Restore point pattern</strong>
+                  <p>Use snapshots as restore checkpoints for the MVP even if rollback stays a follow-up action.</p>
+                </div>
+              </div>
             </>
           ) : (
             <p className="muted">
@@ -179,14 +208,43 @@ export function Documents() {
               </StatusPill>
             </div>
 
-            <div className="meta-grid">
-              <span>Owner: {document.owner}</span>
-              <span>Updated: {new Date(document.updated).toLocaleString()}</span>
+            <div className="document-version-strip">
+              <div className="version-chip">
+                <strong>Owner</strong>
+                <span>{document.owner}</span>
+              </div>
+              <div className="version-chip">
+                <strong>Last update</strong>
+                <span>{new Date(document.updated).toLocaleString()}</span>
+              </div>
+              <div className="version-chip">
+                <strong>Version control</strong>
+                <span>Ready for snapshot and diff</span>
+              </div>
             </div>
 
-            <div className="row space-between wrap">
+            <div className="document-callout">
+              <strong>Why this matters</strong>
+              <p>
+                This card should signal the PRD promise: who owns the doc, when
+                it changed, and where the team can save or compare named
+                versions next.
+              </p>
+            </div>
+
+            <div className="row space-between wrap gap-sm">
               <span className="muted">Live PocketBase document</span>
-              <Link to={`/documents/${document.id}`}>Open details</Link>
+              <div className="page-actions">
+                <Link
+                  className="button-link button-link-secondary"
+                  to={`/documents/${document.id}`}
+                >
+                  Compare versions
+                </Link>
+                <Link className="button-link" to={`/documents/${document.id}`}>
+                  Open history
+                </Link>
+              </div>
             </div>
           </article>
         ))}
