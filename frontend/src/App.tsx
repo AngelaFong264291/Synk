@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthProvider";
 import { Layout } from "./components/Layout";
 import { ProtectedRoute } from "./components/ProtectedRoute";
@@ -40,6 +40,7 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
+            <Route path="team" element={<Navigate to="/workspace" replace />} />
             <Route
               path="documents"
               element={

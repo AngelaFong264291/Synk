@@ -36,7 +36,7 @@ export function Dashboard() {
       <section className="stack-lg">
         <PageHeader
           eyebrow="Dashboard"
-          title={`Welcome back, ${model?.email ?? "teammate"}`}
+          title={`Welcome back, ${model?.email ?? "workspace member"}`}
           description="Loading your workspace status, ownership board, decision log, and version history."
         />
       </section>
@@ -73,8 +73,8 @@ export function Dashboard() {
     <section className="stack-lg">
       <PageHeader
         eyebrow="Dashboard"
-        title={`Welcome back, ${model?.email ?? "teammate"}`}
-        description="A clearer PRD-aligned view of change tracking, task ownership, decision logging, and team momentum."
+        title={`Welcome back, ${model?.email ?? "workspace member"}`}
+        description="A clearer PRD-aligned view of change tracking, task ownership, decision logging, and workspace momentum."
         actions={
           <div className="row gap-sm wrap">
             <Link className="button-link" to="/workspace">
@@ -232,7 +232,7 @@ export function Dashboard() {
 
         <section className="panel stack">
           <div className="row space-between wrap">
-            <h2>Team Accountability</h2>
+            <h2>Workspace Accountability</h2>
             <StatusPill
               tone={summary.overdueTasks.length ? "warning" : "success"}
             >

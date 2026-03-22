@@ -86,7 +86,7 @@ function formatDateTime(value?: string) {
 
 function displayName(user?: UserRecord | null) {
   if (!user) {
-    return "Unknown teammate";
+    return "Unknown workspace member";
   }
 
   return user.name?.trim() || user.email;
@@ -195,7 +195,7 @@ function mapTask(task: TaskRecordWithExpand): Task {
     assignee: displayName(task.expand?.assignee),
     dueDate: task.dueDate ? formatDate(task.dueDate) : "Unscheduled",
     status: statusMap[task.status],
-    linkedDocument: task.expand?.document?.title ?? "General workspace",
+    linkedDocument: task.expand?.document?.title ?? "General workspace task",
     priority: inferTaskPriority(task),
   };
 }

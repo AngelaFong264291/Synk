@@ -557,6 +557,201 @@ ul {
   border: 1px solid rgba(17, 32, 49, 0.08);
 }
 
+.documents-page {
+  gap: 1.75rem;
+}
+
+.documents-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+  gap: 2rem;
+  align-items: center;
+}
+
+.documents-hero-copy {
+  max-width: 44rem;
+}
+
+.documents-hero-text {
+  max-width: 40rem;
+  font-size: 1.08rem;
+  line-height: 1.7;
+}
+
+.documents-hero-art {
+  position: relative;
+  min-height: 19rem;
+  border-radius: 36px;
+  overflow: hidden;
+  border: 1px solid rgba(17, 32, 49, 0.06);
+  box-shadow: var(--shadow);
+  background:
+    radial-gradient(circle at 20% 30%, rgba(159, 220, 246, 0.32), transparent 25%),
+    radial-gradient(circle at 80% 25%, rgba(230, 244, 248, 0.9), transparent 24%),
+    linear-gradient(135deg, rgba(243, 250, 252, 0.95), rgba(235, 247, 251, 0.84));
+}
+
+.documents-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(1px);
+}
+
+.documents-orb-left {
+  left: -2rem;
+  bottom: 1rem;
+  width: 10rem;
+  height: 10rem;
+  background: rgba(155, 211, 230, 0.24);
+}
+
+.documents-orb-right {
+  right: -1.5rem;
+  top: 1rem;
+  width: 8rem;
+  height: 8rem;
+  background: rgba(195, 226, 244, 0.28);
+}
+
+.documents-art-card {
+  position: absolute;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  max-width: 12.5rem;
+  padding: 0.95rem 1rem;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(17, 32, 49, 0.06);
+  box-shadow: 0 18px 30px rgba(17, 32, 49, 0.08);
+}
+
+.documents-art-card-top {
+  left: 2rem;
+  top: 2rem;
+}
+
+.documents-art-card-bottom {
+  right: 1.9rem;
+  top: 6rem;
+}
+
+.documents-art-glyph {
+  display: inline-grid;
+  place-items: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.documents-art-sheet {
+  position: absolute;
+  width: 5.2rem;
+  height: 4rem;
+  border-radius: 1.1rem;
+  background: linear-gradient(180deg, #6e8aa5, #446078);
+  box-shadow: 0 16px 24px rgba(17, 32, 49, 0.14);
+}
+
+.documents-art-sheet-back {
+  right: 5.5rem;
+  bottom: 2.5rem;
+  opacity: 0.4;
+  transform: rotate(-10deg);
+}
+
+.documents-art-sheet-front {
+  right: 8rem;
+  bottom: 3.4rem;
+  transform: rotate(-14deg);
+}
+
+.documents-kpi-grid {
+  gap: 1rem;
+}
+
+.documents-kpi-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.documents-kpi-icon {
+  width: 3rem;
+  height: 3rem;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 18px;
+}
+
+.documents-kpi-icon-docs {
+  color: #2e8db8;
+  background: rgba(96, 188, 224, 0.16);
+}
+
+.documents-kpi-icon-snapshot {
+  color: #4b8f8a;
+  background: rgba(134, 214, 200, 0.18);
+}
+
+.documents-kpi-icon-contributors {
+  color: #7385b5;
+  background: rgba(177, 193, 240, 0.18);
+}
+
+.documents-kpi-glyph {
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.documents-top-grid {
+  gap: 1.15rem;
+}
+
+.documents-create-card,
+.documents-guide-card {
+  padding: 1.35rem 1.45rem;
+}
+
+.documents-empty-card {
+  display: grid;
+  gap: 1rem;
+  padding: 1.1rem;
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(255, 196, 82, 0.14), rgba(255, 255, 255, 0.92));
+  border: 1px solid rgba(240, 170, 46, 0.22);
+}
+
+.documents-empty-icon {
+  width: 3rem;
+  height: 3rem;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 18px;
+  background: rgba(255, 186, 64, 0.18);
+  color: #d97706;
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.documents-empty-link {
+  background: linear-gradient(90deg, #f6b73c, #f0a51f);
+  box-shadow: 0 12px 28px rgba(240, 165, 31, 0.2);
+}
+
+.documents-list-shell {
+  padding: 1.35rem 1.45rem;
+}
+
+.documents-record {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
 .workspace-page {
   gap: 1.75rem;
 }
@@ -1053,6 +1248,7 @@ ul {
 }
 
 @media (max-width: 920px) {
+  .documents-hero,
   .workspace-hero,
   .landing-hero,
   .two-column,
@@ -1071,6 +1267,10 @@ ul {
 
   .workspace-hero-illustration {
     min-height: 15rem;
+  }
+
+  .documents-hero-art {
+    min-height: 14rem;
   }
 
   .workspace-figure {

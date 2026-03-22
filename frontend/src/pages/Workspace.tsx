@@ -152,9 +152,9 @@ export function Workspace() {
           <p className="eyebrow">Workspaces</p>
           <h1>Your Workspaces</h1>
           <p className="workspace-hero-text">
-            Create a new workspace or join an existing one with an invite code to
-            collaborate with your team. Workspaces connect your documents,
-            tasks, and decisions into one clean demo flow.
+            Each workspace is a team space. Owners create one with a name and
+            invite code, then teammates join with that code to collaborate on
+            documents, tasks, and decisions in one place.
           </p>
         </div>
         <div className="workspace-hero-illustration" aria-hidden="true">
@@ -215,7 +215,7 @@ export function Workspace() {
             </label>
           ) : (
             <p className="muted">
-              No workspace yet. Create one below or join with an invite code.
+              No team workspace yet. Create one below or join with an invite code.
             </p>
           )}
 
@@ -274,7 +274,7 @@ export function Workspace() {
             </div>
           ) : (
             <p className="muted">
-              Choose a workspace to see members and roles.
+              Choose a workspace to see teammates and membership.
             </p>
           )}
         </section>
@@ -283,7 +283,7 @@ export function Workspace() {
       <div className="two-column workspace-form-grid">
         <form className="panel stack workspace-form-card" onSubmit={onCreateWorkspace}>
           <div className="row space-between wrap">
-            <h2>Create a new workspace</h2>
+            <h2>Create a new team workspace</h2>
             <StatusPill tone="accent">Owner flow</StatusPill>
           </div>
           <label className="field">
@@ -313,7 +313,7 @@ export function Workspace() {
 
         <form className="panel stack workspace-form-card" onSubmit={onJoinWorkspace}>
           <div className="row space-between wrap">
-            <h2>Join a workspace</h2>
+            <h2>Join a team workspace</h2>
             <StatusPill tone="accent">Invite flow</StatusPill>
           </div>
           <label className="field">

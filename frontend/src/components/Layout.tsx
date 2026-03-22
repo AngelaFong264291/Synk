@@ -20,7 +20,7 @@ export function Layout() {
             {isAuthenticated ? (
               <>
                 <NavLink to="/dashboard">Dashboard</NavLink>
-                <NavLink to="/workspace">Workspace</NavLink>
+                <NavLink to="/workspace">Workspaces</NavLink>
                 <NavLink to="/documents">Documents</NavLink>
                 <NavLink to="/tasks">Tasks</NavLink>
                 <NavLink to="/decisions">Decisions</NavLink>
