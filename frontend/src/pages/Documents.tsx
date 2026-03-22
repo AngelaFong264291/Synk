@@ -4,7 +4,6 @@ import { createDocument, listWorkspaceDocuments } from "../lib/api";
 import { useActiveWorkspace } from "../lib/useActiveWorkspace";
 import type { DocumentRecord } from "../lib/types";
 import { StatusPill } from "../components/StatusPill";
-import { pb } from "../lib/pocketbase";
 
 function getFileIcon(fileName?: string) {
   if (!fileName) return "📄";
@@ -133,21 +132,8 @@ export function Documents() {
   }
 
   const uniqueOwners = new Set(documents.map((document) => document.owner)).size;
-  const snapshotReadyCount = documents.filter(
-    (document) => document.currentContent.trim().length > 0,
-  ).length;
+  const snapshotReadyCount = documents.length; // Simplified as currentContent is no longer parsed on upload
   const latestDocument = documents[0] ?? null;
-  const emptyState = !loading && activeWorkspace && documents.length === 0;
-
-  const documentCards = useMemo(
-    () =>
-      documents.map((document) => ({
-        ...document,
-        preview: document.currentContent.slice(0, 160) || "No content yet.",
-        updatedLabel: formatUpdatedAt(document.updated),
-      })),
-    [documents],
-  );
 
   return (
     <section className="stack-xl documents-page">
@@ -238,7 +224,7 @@ export function Documents() {
       </div>
 
       <div className="two-column documents-top-grid">
-        <form className="panel stack documents-create-card" onSubmit={onCreateDocument}>
+        <form className="panel stack documents-create-card">
           <div className="row space-between wrap">
             <h2>New document</h2>
             <StatusPill tone={activeWorkspace ? "accent" : "warning"}>
@@ -349,7 +335,7 @@ export function Documents() {
                 </div>
                 <div className="version-chip">
                   <strong>Last update</strong>
-                  <span>{document.updatedLabel}</span>
+                  <span>{formatUpdatedAt(document.updated)}</span>
                 </div>
                 <div className="version-chip">
                   <strong>Status</strong>
@@ -379,7 +365,7 @@ export function Documents() {
             No documents yet. Upload a DOCX, XLSX, PPTX, or PDF file to start.
           </p>
         ) : null}
-      </div>
+      </section>
     </section>
   );
 }

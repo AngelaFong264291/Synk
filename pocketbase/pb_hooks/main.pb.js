@@ -13,7 +13,7 @@ onRecordAfterCreateSuccess((e) => {
     
     if (workspaceMembersCollection) {
         const record = new Record(workspaceMembersCollection, {
-            "workspace": workspace.getId(),
+            "workspace": workspace.id,
             "user": workspace.get("owner"),
             "role": "owner"
         });

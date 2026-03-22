@@ -1,12 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useLocation, useNavigate, type Location } from "react-router-dom";
-import { useState, type SubmitEvent } from "react";
-import {
-  Link,
-  useLocation,
-  useNavigate,
-  type Location,
-} from "react-router-dom";
+import { Link, useLocation, useNavigate, type Location } from "react-router-dom";
 import { pb } from "../lib/pocketbase";
 import { useAuth } from "../auth/useAuth";
 
@@ -28,7 +21,7 @@ export function Login() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  async function onSubmit(e: SubmitEvent<HTMLFormElement>) {
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
     setPending(true);

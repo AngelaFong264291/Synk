@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill } from "../components/StatusPill";
+import { pb } from "../lib/pocketbase";
 import { createDashboardSummary } from "../lib/summary";
 import { useActiveWorkspace } from "../lib/useActiveWorkspace";
 import type { DashboardViewModel } from "../lib/view-models";
@@ -161,22 +162,6 @@ export function Dashboard() {
   }
 
   const { decisions, documents, members, tasks, workspace, source } = data;
-  const openTasks = tasks.filter((task) => task.status !== "Done");
-
-  if (!data) {
-    return (
-      <section className="stack-lg">
-        <PageHeader
-          eyebrow="Dashboard"
-          title={`Welcome back, ${model?.email ?? "workspace member"}`}
-          description="Loading your workspace status, ownership board, decision log, and version history."
-        />
-      </section>
-    );
-  }
-
-  const { decisions, documents, members, tasks, workspace, source } = data;
-  const openTasks = tasks.filter((task) => task.status !== "Done");
   const completedTasks = tasks.filter((task) => task.status === "Done");
   const summary = createDashboardSummary({
     workspace,
@@ -199,7 +184,10 @@ export function Dashboard() {
         createdAt: version.createdAt,
       })),
     )
-    .at(-1);
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .at(0);
+
+  const openTasks = tasks.filter((task) => task.status !== "Done");
 
   return (
     <section className="stack-lg">
@@ -494,13 +482,13 @@ export function Dashboard() {
         </div>
       </section>
 
-          <div className="document-callout">
-            <strong>What to say in the demo</strong>
-            <p>{summary.narrative[0]}</p>
-            <span className="muted">{summary.narrative[1]}</span>
-          </div>
-        </section>
-      </div>
+      <section className="panel stack">
+        <div className="document-callout">
+          <strong>What to say in the demo</strong>
+          <p>{summary.narrative[0]}</p>
+          <span className="muted">{summary.narrative[1]}</span>
+        </div>
+      </section>
     </section>
   );
 }

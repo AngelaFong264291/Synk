@@ -1,6 +1,6 @@
 /// <reference path="../pb_data/types.d.ts" />
 migrate((app) => {
-    const collectionsToFix = ["documents", "document_versions", "tasks", "decisions", "workspaces", "workspace_members", "teams", "team_members", "team_invites"];
+    const collectionsToFix = ["documents", "document_versions", "tasks", "decisions", "workspaces", "workspace_members", "workspace_invites"];
     
     for (const name of collectionsToFix) {
         try {

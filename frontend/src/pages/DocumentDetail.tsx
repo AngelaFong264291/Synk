@@ -1,13 +1,7 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
-import { getDocumentBundle } from "../lib/api";
-import { useEffect, useMemo, useState, type SubmitEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
-  createDocumentVersion,
-  listDocumentVersions,
-  listWorkspaceDocuments,
-  updateDocument,
+  getDocumentBundle,
 } from "../lib/api";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill } from "../components/StatusPill";
@@ -85,9 +79,6 @@ export function DocumentDetail() {
   const [bundle, setBundle] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [pendingSave, setPendingSave] = useState<"draft" | "snapshot" | null>(
-    null,
-  );
 
   useEffect(() => {
     let cancelled = false;
@@ -103,18 +94,6 @@ export function DocumentDetail() {
         if (!cancelled) {
           setBundle(nextBundle);
         }
-
-        const nextDocument =
-          documents.find((entry) => entry.id === currentDocumentId) ?? null;
-
-        setDocument(nextDocument);
-        setVersions(nextVersions);
-        setLeftVersionId("");
-        setRightVersionId("");
-        setContentDraft(nextDocument?.currentContent ?? "");
-        setSnapshotName(
-          nextVersions[0] ? `${versionLabel(nextVersions[0])} follow-up` : "",
-        );
       } catch (loadError: unknown) {
         if (!cancelled) {
           setError(
@@ -136,35 +115,6 @@ export function DocumentDetail() {
       cancelled = true;
     };
   }, [documentId]);
-  }, [activeWorkspace, documentId]);
-
-  const [leftVersionId, setLeftVersionId] = useState("");
-  const [rightVersionId, setRightVersionId] = useState("");
-  const effectiveLeftVersionId =
-    leftVersionId || versions[versions.length - 1]?.id || "";
-  const effectiveRightVersionId = rightVersionId || versions[0]?.id || "";
-
-  const leftVersion = useMemo(
-    () =>
-      versions.find((version) => version.id === effectiveLeftVersionId) ??
-      versions[versions.length - 1],
-    [effectiveLeftVersionId, versions],
-  );
-  const rightVersion = useMemo(
-    () =>
-      versions.find((version) => version.id === effectiveRightVersionId) ??
-      versions[0],
-    [effectiveRightVersionId, versions],
-  );
-  const diffLines = useMemo(
-    () =>
-      buildLineDiff(leftVersion?.content ?? "", rightVersion?.content ?? ""),
-    [leftVersion?.content, rightVersion?.content],
-  );
-  const diffStats = useMemo(() => getDiffStats(diffLines), [diffLines]);
-
-  async function onSaveDraft(event: SubmitEvent<HTMLFormElement>) {
-    event.preventDefault();
 
   if (loading) {
     return <p className="muted">Loading document...</p>;
@@ -172,65 +122,11 @@ export function DocumentDetail() {
 
   if (error) {
     return <p className="error">{error}</p>;
-    setPendingSave("draft");
-    setError(null);
-
-    try {
-      const updatedDocument = await updateDocument(document.id, {
-        currentContent: contentDraft,
-      });
-      setDocument(updatedDocument);
-    } catch (saveError: unknown) {
-      setError(
-        saveError instanceof Error
-          ? saveError.message
-          : "Unable to save document",
-      );
-    } finally {
-      setPendingSave(null);
-    }
   }
 
   if (!bundle) {
     return <p className="muted">Document not found.</p>;
-  async function onCreateSnapshot(event: SubmitEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!document || !snapshotName) {
-      return;
-    }
-
-    setPendingSave("snapshot");
-    setError(null);
-
-    try {
-      const createdVersion = await createDocumentVersion({
-        documentId: document.id,
-        versionName: snapshotName,
-        content: contentDraft,
-      });
-      setDocument((current) =>
-        current
-          ? {
-              ...current,
-              currentContent: contentDraft,
-            }
-          : current,
-      );
-      setVersions((current) => [createdVersion, ...current]);
-      setRightVersionId(createdVersion.id);
-      setSnapshotName(`${snapshotName} v2`);
-    } catch (snapshotError: unknown) {
-      setError(
-        snapshotError instanceof Error
-          ? snapshotError.message
-          : "Unable to create snapshot",
-      );
-    } finally {
-      setPendingSave(null);
-    }
   }
-
   return (
     <section className="stack-lg">
       <PageHeader
@@ -307,7 +203,46 @@ export function DocumentDetail() {
         </StatusPill>
       </div>
 
-      {/* ... existing version history / related content ... */}
+      <div className="stack-lg">
+        <div className="panel stack">
+          <h3>Linked Tasks</h3>
+          {bundle.linkedTasks.length > 0 ? (
+            <div className="list stack-sm">
+              {bundle.linkedTasks.map((task: any) => (
+                <Link key={task.id} to="/tasks" className="list-row panel-sm no-underline">
+                  <div className="stack-xs">
+                    <strong>{task.title}</strong>
+                    <p className="muted small">{task.status}</p>
+                  </div>
+                  <span>→</span>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="muted">No tasks linked to this document.</p>
+          )}
+        </div>
+
+        <div className="panel stack">
+          <h3>Version History</h3>
+          {bundle.versions.length > 0 ? (
+            <div className="list stack-sm">
+              {bundle.versions.map((version: any) => (
+                <div key={version.id} className="list-row panel-sm">
+                  <div className="stack-xs">
+                    <strong>{version.versionName}</strong>
+                    <p className="muted small">
+                      By {version.expand?.author?.name || "Unknown"} on {new Date(version.created).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="muted">No version history available.</p>
+          )}
+        </div>
+      </div>
     </section>
   );
 }
