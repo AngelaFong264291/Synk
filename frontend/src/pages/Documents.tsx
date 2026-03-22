@@ -1,14 +1,15 @@
 import { useEffect, useState, type SubmitEvent } from "react";
 import { Link } from "react-router-dom";
-import { createDocument, listWorkspaceDocuments } from "../lib/api";
+import { createDocument, listWorkspaceDocumentsWithExpand } from "../lib/api";
+import { documentOwnerEmail, formatDocumentTimestamp } from "../lib/display";
 import { useActiveWorkspace } from "../lib/useActiveWorkspace";
-import type { DocumentRecord } from "../lib/types";
+import type { DocumentRecordWithExpand } from "../lib/types";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill } from "../components/StatusPill";
 
 export function Documents() {
   const { activeWorkspace } = useActiveWorkspace();
-  const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+  const [documents, setDocuments] = useState<DocumentRecordWithExpand[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,7 +32,7 @@ export function Documents() {
       setError(null);
 
       try {
-        const nextDocuments = await listWorkspaceDocuments(workspaceId);
+        const nextDocuments = await listWorkspaceDocumentsWithExpand(workspaceId);
         if (!cancelled) {
           setDocuments(nextDocuments);
         }
@@ -184,10 +185,8 @@ export function Documents() {
             </div>
 
             <div className="meta-grid">
-              <span>Owner: {document.owner}</span>
-              <span>
-                Updated: {new Date(document.updated).toLocaleString()}
-              </span>
+              <span>Owner: {documentOwnerEmail(document)}</span>
+              <span>Updated: {formatDocumentTimestamp(document)}</span>
             </div>
 
             <div className="row space-between wrap">

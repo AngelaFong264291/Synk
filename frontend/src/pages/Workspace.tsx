@@ -1,8 +1,15 @@
 import { useEffect, useState, type SubmitEvent } from "react";
 import { Link } from "react-router-dom";
-import { listWorkspaceMembers } from "../lib/api";
+import {
+  listWorkspaceCommits,
+  listWorkspaceMembers,
+  vcRevert,
+} from "../lib/api";
 import { useActiveWorkspace } from "../lib/useActiveWorkspace";
-import type { WorkspaceMemberWithExpand } from "../lib/types";
+import type {
+  WorkspaceCommitRecordWithExpand,
+  WorkspaceMemberWithExpand,
+} from "../lib/types";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill } from "../components/StatusPill";
 
@@ -34,6 +41,11 @@ export function Workspace() {
   const [members, setMembers] = useState<WorkspaceMemberWithExpand[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [membersError, setMembersError] = useState<string | null>(null);
+
+  const [commits, setCommits] = useState<WorkspaceCommitRecordWithExpand[]>([]);
+  const [commitsLoading, setCommitsLoading] = useState(false);
+  const [commitsError, setCommitsError] = useState<string | null>(null);
+  const [revertingCommitId, setRevertingCommitId] = useState<string | null>(null);
 
   const [createName, setCreateName] = useState("");
   const [createDescription, setCreateDescription] = useState("");
@@ -83,6 +95,78 @@ export function Workspace() {
       cancelled = true;
     };
   }, [activeWorkspaceId]);
+
+  useEffect(() => {
+    if (!activeWorkspaceId) {
+      setCommits([]);
+      setCommitsError(null);
+      return;
+    }
+
+    const workspaceId = activeWorkspaceId;
+    let cancelled = false;
+
+    async function loadCommits() {
+      setCommitsLoading(true);
+      setCommitsError(null);
+
+      try {
+        const nextCommits = await listWorkspaceCommits(workspaceId);
+        if (!cancelled) {
+          setCommits(nextCommits);
+        }
+      } catch (loadError: unknown) {
+        if (!cancelled) {
+          setCommitsError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Unable to load workspace commits",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setCommitsLoading(false);
+        }
+      }
+    }
+
+    void loadCommits();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWorkspaceId]);
+
+  async function onRevertToCommit(commitId: string) {
+    if (!activeWorkspaceId) {
+      return;
+    }
+    const ok = window.confirm(
+      "Restore every document in this workspace to how it was at this commit? " +
+        "Current drafts will be overwritten where they differ. " +
+        "A new commit will be created that records this revert.",
+    );
+    if (!ok) {
+      return;
+    }
+
+    setRevertingCommitId(commitId);
+    setCommitsError(null);
+
+    try {
+      await vcRevert(activeWorkspaceId, commitId);
+      const nextCommits = await listWorkspaceCommits(activeWorkspaceId);
+      setCommits(nextCommits);
+    } catch (revertError: unknown) {
+      setCommitsError(
+        revertError instanceof Error
+          ? revertError.message
+          : "Unable to revert workspace",
+      );
+    } finally {
+      setRevertingCommitId(null);
+    }
+  }
 
   async function onCreateWorkspace(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -222,6 +306,58 @@ export function Workspace() {
           )}
         </section>
       </div>
+
+      {activeWorkspaceId ? (
+        <section className="panel stack">
+          <div className="row space-between wrap">
+            <h2>Workspace commits</h2>
+            <StatusPill tone={commitsError ? "warning" : "success"}>
+              {commitsLoading ? "Loading" : `${commits.length} commits`}
+            </StatusPill>
+          </div>
+
+          {commitsError ? <p className="error">{commitsError}</p> : null}
+
+          {commitsLoading ? (
+            <p className="muted">Loading commit history…</p>
+          ) : commits.length ? (
+            <ul className="stack">
+              {commits.map((commit) => (
+                <li key={commit.id}>
+                  <div className="row space-between wrap gap-sm">
+                    <div>
+                      <strong>{commit.message}</strong>
+                      <p className="muted" style={{ margin: "0.35rem 0 0" }}>
+                        {new Date(commit.created).toLocaleString()}
+                        {commit.expand?.author
+                          ? ` · ${commit.expand.author.email ?? commit.expand.author.name}`
+                          : ""}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="button-secondary"
+                      disabled={revertingCommitId !== null}
+                      onClick={() => {
+                        void onRevertToCommit(commit.id);
+                      }}
+                    >
+                      {revertingCommitId === commit.id
+                        ? "Restoring…"
+                        : "Restore to here"}
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="muted">
+              No workspace commits yet. Saving a document snapshot creates a
+              commit.
+            </p>
+          )}
+        </section>
+      ) : null}
 
       <div className="two-column">
         <form className="panel stack" onSubmit={onCreateWorkspace}>

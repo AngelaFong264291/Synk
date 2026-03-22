@@ -2,17 +2,25 @@ import { useEffect, useMemo, useState, type SubmitEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   createDocumentVersion,
-  listDocumentVersions,
-  listWorkspaceDocuments,
+  getDocumentWithExpand,
+  listDocumentVersionsWithExpand,
   updateDocument,
 } from "../lib/api";
+import {
+  documentOwnerEmail,
+  formatDocumentTimestamp,
+  versionAuthorEmail,
+} from "../lib/display";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill } from "../components/StatusPill";
 import { buildLineDiff, getDiffStats } from "../lib/diff";
 import { useActiveWorkspace } from "../lib/useActiveWorkspace";
-import type { DocumentRecord, DocumentVersionRecord } from "../lib/types";
+import type {
+  DocumentRecordWithExpand,
+  DocumentVersionRecordWithExpand,
+} from "../lib/types";
 
-function versionLabel(version: DocumentVersionRecord) {
+function versionLabel(version: DocumentVersionRecordWithExpand) {
   return version.versionName || `Snapshot ${version.id.slice(0, 4)}`;
 }
 
@@ -20,8 +28,12 @@ export function DocumentDetail() {
   const { documentId } = useParams();
   const { activeWorkspace } = useActiveWorkspace();
 
-  const [document, setDocument] = useState<DocumentRecord | null>(null);
-  const [versions, setVersions] = useState<DocumentVersionRecord[]>([]);
+  const [document, setDocument] = useState<DocumentRecordWithExpand | null>(
+    null,
+  );
+  const [versions, setVersions] = useState<DocumentVersionRecordWithExpand[]>(
+    [],
+  );
   const [contentDraft, setContentDraft] = useState("");
   const [snapshotName, setSnapshotName] = useState("");
   const [loading, setLoading] = useState(false);
@@ -48,17 +60,22 @@ export function DocumentDetail() {
       setError(null);
 
       try {
-        const [documents, nextVersions] = await Promise.all([
-          listWorkspaceDocuments(workspaceId),
-          listDocumentVersions(currentDocumentId),
+        const [nextDocument, nextVersions] = await Promise.all([
+          getDocumentWithExpand(currentDocumentId),
+          listDocumentVersionsWithExpand(currentDocumentId),
         ]);
 
         if (cancelled) {
           return;
         }
 
-        const nextDocument =
-          documents.find((entry) => entry.id === currentDocumentId) ?? null;
+        if (nextDocument.workspace !== workspaceId) {
+          setError("This document is not in the active workspace.");
+          setDocument(null);
+          setVersions([]);
+          setContentDraft("");
+          return;
+        }
 
         setDocument(nextDocument);
         setVersions(nextVersions);
@@ -167,7 +184,7 @@ export function DocumentDetail() {
       );
       setVersions((current) => [createdVersion, ...current]);
       setRightVersionId(createdVersion.id);
-      setSnapshotName(`${snapshotName} v2`);
+      setSnapshotName("");
     } catch (snapshotError: unknown) {
       setError(
         snapshotError instanceof Error
@@ -216,10 +233,8 @@ export function DocumentDetail() {
                 </StatusPill>
               </div>
               <div className="meta-grid">
-                <span>Owner: {document.owner}</span>
-                <span>
-                  Updated: {new Date(document.updated).toLocaleString()}
-                </span>
+                <span>Owner: {documentOwnerEmail(document)}</span>
+                <span>Updated: {formatDocumentTimestamp(document)}</span>
               </div>
               <label className="field">
                 <span>Document content</span>
@@ -261,7 +276,9 @@ export function DocumentDetail() {
                         {new Date(version.created).toLocaleString()}
                       </span>
                     </div>
-                    <p className="muted">Author: {version.author}</p>
+                    <p className="muted">
+                      Author: {versionAuthorEmail(version)}
+                    </p>
                   </article>
                 ))}
               </div>

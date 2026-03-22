@@ -1,4 +1,4 @@
-import { pb } from "./pocketbase";
+import { normalizeAuthEmail, pb } from "./pocketbase";
 import { collections } from "./types";
 import type {
   DashboardSnapshot,
@@ -12,10 +12,22 @@ import type {
   TaskRecordWithExpand,
   TaskStatus,
   UserRecord,
+  WorkspaceCommitRecordWithExpand,
   WorkspaceMemberWithExpand,
   WorkspaceRecord,
   WorkspaceRole,
 } from "./types";
+
+/** Include `fields` so `expand` does not trim base system fields (`created`, `updated`). */
+const DOCUMENT_WITH_OWNER_EXPAND = {
+  expand: "owner",
+  fields: "*",
+};
+
+const DOCUMENT_VERSION_WITH_AUTHOR_EXPAND = {
+  expand: "author",
+  fields: "*",
+};
 
 type SignUpInput = {
   email: string;
@@ -72,6 +84,135 @@ type CreateDecisionInput = {
   decidedAt?: string;
 };
 
+export type VcChangeDocumentInput = {
+  documentId: string;
+  content: string;
+  versionName?: string;
+};
+
+export type VcChangeInput = {
+  workspaceId: string;
+  message: string;
+  documents: VcChangeDocumentInput[];
+};
+
+export type VcChangeResponse = {
+  commit: { id: string };
+  versions: Array<{
+    id: string;
+    document: string;
+    versionName: string;
+    content: string;
+    author: string;
+    commit: string;
+    created: string;
+  }>;
+};
+
+export type VcDiffDocument = {
+  documentId: string;
+  title: string;
+  before: string;
+  after: string;
+};
+
+export type VcDiffResponse = {
+  workspaceId: string;
+  fromCommit: string;
+  toCommit: string;
+  documents: VcDiffDocument[];
+};
+
+export type VcInfoChange = {
+  documentId: string;
+  title: string;
+  versionId: string;
+};
+
+export type VcInfoResponse = {
+  id: string;
+  workspaceId: string;
+  message: string;
+  author: string;
+  created: string;
+  hash: string;
+  changes: VcInfoChange[];
+};
+
+export type VcRevertResponse = {
+  commit: { id: string };
+  versions: Array<{
+    id: string;
+    document: string;
+    versionName: string;
+    commit: string;
+  }>;
+};
+
+async function vcRequest<T>(path: string, init: RequestInit): Promise<T> {
+  const base = pb.baseURL.replace(/\/$/, "");
+  const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+    ...(init.headers ?? {}),
+  };
+  const token = pb.authStore.token;
+  if (token) {
+    (headers as Record<string, string>).Authorization = token;
+  }
+  const res = await fetch(url, { ...init, headers });
+  const data = (await res.json().catch(() => ({}))) as { message?: string };
+  if (!res.ok) {
+    throw new Error(data.message ?? res.statusText);
+  }
+  return data as T;
+}
+
+export async function vcChange(
+  input: VcChangeInput,
+): Promise<VcChangeResponse> {
+  requireCurrentUser();
+  return vcRequest<VcChangeResponse>("/api/synk/vc/change", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function vcDiff(
+  workspaceId: string,
+  fromCommit: string,
+  toCommit: string,
+): Promise<VcDiffResponse> {
+  requireCurrentUser();
+  const params = new URLSearchParams({
+    workspaceId,
+    fromCommit,
+    toCommit,
+  });
+  return vcRequest<VcDiffResponse>(`/api/synk/vc/diff?${params.toString()}`, {
+    method: "GET",
+  });
+}
+
+export async function vcInfo(commitId: string): Promise<VcInfoResponse> {
+  requireCurrentUser();
+  const params = new URLSearchParams({ commitId });
+  return vcRequest<VcInfoResponse>(`/api/synk/vc/info?${params.toString()}`, {
+    method: "GET",
+  });
+}
+
+export async function vcRevert(
+  workspaceId: string,
+  commitId?: string,
+): Promise<VcRevertResponse> {
+  requireCurrentUser();
+  return vcRequest<VcRevertResponse>("/api/synk/vc/revert", {
+    method: "POST",
+    body: JSON.stringify({ workspaceId, commitId }),
+  });
+}
+
 function requireCurrentUser(): UserRecord {
   const record = pb.authStore.record;
 
@@ -118,7 +259,7 @@ async function getWorkspaceMembership(workspaceId: string, userId?: string) {
 
 export async function signUp(input: SignUpInput) {
   return pb.collection(collections.users).create<UserRecord>({
-    email: input.email,
+    email: normalizeAuthEmail(input.email),
     password: input.password,
     passwordConfirm: input.passwordConfirm,
     name: input.name,
@@ -128,7 +269,7 @@ export async function signUp(input: SignUpInput) {
 export async function signIn(email: string, password: string) {
   return pb
     .collection(collections.users)
-    .authWithPassword<UserRecord>(email, password);
+    .authWithPassword<UserRecord>(normalizeAuthEmail(email), password);
 }
 
 export function signOut() {
@@ -151,9 +292,10 @@ export async function listMyWorkspaces() {
     .collection(collections.workspaceMembers)
     .getFullList<WorkspaceMemberWithExpand>({
       filter: pb.filter("user = {:user}", { user: user.id }),
-      sort: "created",
       expand: "workspace,user",
     });
+
+  memberships.sort((a, b) => a.created.localeCompare(b.created));
 
   return memberships
     .map((membership) => membership.expand?.workspace)
@@ -223,15 +365,18 @@ export async function ensureWorkspaceMembership(
 export async function listWorkspaceMembers(workspaceId: string) {
   await getWorkspaceMembership(workspaceId);
 
-  return pb
+  const members = await pb
     .collection(collections.workspaceMembers)
     .getFullList<WorkspaceMemberWithExpand>({
       filter: pb.filter("workspace = {:workspace}", {
         workspace: workspaceId,
       }),
-      sort: "created",
       expand: "user,workspace",
     });
+
+  members.sort((a, b) => a.created.localeCompare(b.created));
+
+  return members;
 }
 
 export async function getWorkspace(workspaceId: string) {
@@ -245,29 +390,54 @@ export async function getWorkspace(workspaceId: string) {
 export async function listWorkspaceDocuments(workspaceId: string) {
   await getWorkspaceMembership(workspaceId);
 
-  return pb.collection(collections.documents).getFullList<DocumentRecord>({
+  const docs = await pb.collection(collections.documents).getFullList<DocumentRecord>({
     filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
-    sort: "-updated",
+    fields: "*",
   });
+
+  docs.sort((a, b) => {
+    const bu = b.updated || b.created || "";
+    const au = a.updated || a.created || "";
+    return bu.localeCompare(au);
+  });
+
+  return docs;
 }
 
 export async function listWorkspaceDocumentsWithExpand(workspaceId: string) {
   await getWorkspaceMembership(workspaceId);
 
-  return pb
+  const docs = await pb
     .collection(collections.documents)
     .getFullList<DocumentRecordWithExpand>({
       filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
-      sort: "-updated",
-      expand: "owner",
+      ...DOCUMENT_WITH_OWNER_EXPAND,
     });
+
+  docs.sort((a, b) => {
+    const bu = b.updated || b.created || "";
+    const au = a.updated || a.created || "";
+    return bu.localeCompare(au);
+  });
+
+  return docs;
+}
+
+export async function getDocumentWithExpand(documentId: string) {
+  const document = await pb
+    .collection(collections.documents)
+    .getOne<DocumentRecordWithExpand>(documentId, DOCUMENT_WITH_OWNER_EXPAND);
+
+  await getWorkspaceMembership(document.workspace);
+
+  return document;
 }
 
 export async function createDocument(input: CreateDocumentInput) {
   const user = requireCurrentUser();
   await getWorkspaceMembership(input.workspaceId, user.id);
 
-  return pb.collection(collections.documents).create<DocumentRecord>({
+  const created = await pb.collection(collections.documents).create<DocumentRecord>({
     workspace: input.workspaceId,
     title: input.title,
     currentContent: input.currentContent ?? "",
@@ -275,6 +445,10 @@ export async function createDocument(input: CreateDocumentInput) {
     visibility: input.visibility ?? "workspace",
     allowedMembers: input.allowedMembers ?? [],
   });
+
+  return pb
+    .collection(collections.documents)
+    .getOne<DocumentRecordWithExpand>(created.id, DOCUMENT_WITH_OWNER_EXPAND);
 }
 
 export async function updateDocument(
@@ -287,9 +461,13 @@ export async function updateDocument(
 
   await getWorkspaceMembership(current.workspace);
 
-  return pb
+  await pb
     .collection(collections.documents)
     .update<DocumentRecord>(documentId, input);
+
+  return pb
+    .collection(collections.documents)
+    .getOne<DocumentRecordWithExpand>(documentId, DOCUMENT_WITH_OWNER_EXPAND);
 }
 
 export async function listDocumentVersions(documentId: string) {
@@ -299,12 +477,15 @@ export async function listDocumentVersions(documentId: string) {
 
   await getWorkspaceMembership(document.workspace);
 
-  return pb
+  const versions = await pb
     .collection(collections.documentVersions)
     .getFullList<DocumentVersionRecord>({
       filter: pb.filter("document = {:document}", { document: documentId }),
-      sort: "-created",
     });
+
+  versions.sort((a, b) => b.created.localeCompare(a.created));
+
+  return versions;
 }
 
 export async function listDocumentVersionsWithExpand(documentId: string) {
@@ -314,13 +495,16 @@ export async function listDocumentVersionsWithExpand(documentId: string) {
 
   await getWorkspaceMembership(document.workspace);
 
-  return pb
+  const versions = await pb
     .collection(collections.documentVersions)
     .getFullList<DocumentVersionRecordWithExpand>({
       filter: pb.filter("document = {:document}", { document: documentId }),
-      sort: "-created",
-      expand: "author",
+      ...DOCUMENT_VERSION_WITH_AUTHOR_EXPAND,
     });
+
+  versions.sort((a, b) => b.created.localeCompare(a.created));
+
+  return versions;
 }
 
 export async function createDocumentVersion(input: CreateVersionInput) {
@@ -331,31 +515,44 @@ export async function createDocumentVersion(input: CreateVersionInput) {
 
   await getWorkspaceMembership(document.workspace, user.id);
 
-  const previousContent = document.currentContent;
-  const createdVersion = await pb
+  const { versions } = await vcChange({
+    workspaceId: document.workspace,
+    message: input.versionName,
+    documents: [
+      {
+        documentId: document.id,
+        content: input.content,
+        versionName: input.versionName,
+      },
+    ],
+  });
+
+  const created = versions[0];
+  if (!created) {
+    throw new Error("Version control API returned no versions");
+  }
+
+  return pb
     .collection(collections.documentVersions)
-    .create<DocumentVersionRecord>({
-      document: document.id,
-      versionName: input.versionName,
-      content: input.content,
-      author: user.id,
+    .getOne<DocumentVersionRecordWithExpand>(
+      created.id,
+      DOCUMENT_VERSION_WITH_AUTHOR_EXPAND,
+    );
+}
+
+export async function listWorkspaceCommits(workspaceId: string) {
+  await getWorkspaceMembership(workspaceId);
+
+  const commits = await pb
+    .collection(collections.workspaceCommits)
+    .getFullList<WorkspaceCommitRecordWithExpand>({
+      filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
+      expand: "author",
     });
 
-  try {
-    await updateDocument(document.id, { currentContent: input.content });
-    return createdVersion;
-  } catch (error: unknown) {
-    try {
-      await pb
-        .collection(collections.documentVersions)
-        .delete(createdVersion.id);
-      await updateDocument(document.id, { currentContent: previousContent });
-    } catch {
-      // Best-effort rollback only; preserve the original error below.
-    }
+  commits.sort((a, b) => b.created.localeCompare(a.created));
 
-    throw error;
-  }
+  return commits;
 }
 
 export async function listWorkspaceTasks(workspaceId: string) {
@@ -478,9 +675,7 @@ export async function getDashboardSnapshot(
 export async function getDocumentBundle(documentId: string) {
   const document = await pb
     .collection(collections.documents)
-    .getOne<DocumentRecordWithExpand>(documentId, {
-      expand: "owner",
-    });
+    .getOne<DocumentRecordWithExpand>(documentId, DOCUMENT_WITH_OWNER_EXPAND);
 
   await getWorkspaceMembership(document.workspace);
 
