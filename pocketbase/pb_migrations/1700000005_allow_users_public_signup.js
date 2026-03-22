@@ -3,8 +3,7 @@ migrate(
   (app) => {
     const users = app.findCollectionByNameOrId("users");
     if (!users) return;
-    // Allow sign-up from the web app (unauthenticated POST /api/collections/users/records)
-    users.createRule = "true";
+    users.createRule = "";
     app.save(users);
   },
   (app) => {
