@@ -1,3 +1,4 @@
+import { ClientResponseError } from "pocketbase";
 import { normalizeAuthEmail, pb } from "./pocketbase";
 import { collections } from "./types";
 import type {
@@ -253,6 +254,15 @@ function isMissingCollectionError(error: unknown) {
   );
 }
 
+/**
+ * Local PocketBase DBs can leave a `workspaces` row in `_collections` that
+ * rejects every list request with 400 (broken schema/rules). Teams is the
+ * real backend after migration `use_teams_as_backend`; treat this like absent.
+ */
+function isUnusableLegacyWorkspacesTableError(error: unknown) {
+  return error instanceof ClientResponseError && error.status === 400;
+}
+
 async function getWorkspaceByInviteCode(inviteCode: string) {
   const normalizedCode = normalizeInviteCode(inviteCode);
 
@@ -269,13 +279,20 @@ async function getWorkspaceByInviteCode(inviteCode: string) {
       throw error;
     }
 
-    return pb
-      .collection(collections.workspaces)
-      .getFirstListItem<WorkspaceRecord>(
-        pb.filter("inviteCode = {:inviteCode}", {
-          inviteCode: normalizedCode,
-        }),
-      );
+    try {
+      return await pb
+        .collection(collections.workspaces)
+        .getFirstListItem<WorkspaceRecord>(
+          pb.filter("inviteCode = {:inviteCode}", {
+            inviteCode: normalizedCode,
+          }),
+        );
+    } catch (fallbackError: unknown) {
+      if (isUnusableLegacyWorkspacesTableError(fallbackError)) {
+        throw error;
+      }
+      throw fallbackError;
+    }
   }
 }
 
@@ -318,7 +335,10 @@ async function getOwnedWorkspace(workspaceId: string, userId: string) {
       .getOne<WorkspaceRecord>(workspaceId);
     return workspace.owner === userId ? workspace : null;
   } catch (error: unknown) {
-    if (!isMissingCollectionError(error)) {
+    if (
+      !isMissingCollectionError(error) &&
+      !isUnusableLegacyWorkspacesTableError(error)
+    ) {
       throw error;
     }
 
@@ -463,7 +483,10 @@ export async function listMyWorkspaces() {
         sort: "name",
       });
   } catch (error: unknown) {
-    if (!isMissingCollectionError(error)) {
+    if (
+      !isMissingCollectionError(error) &&
+      !isUnusableLegacyWorkspacesTableError(error)
+    ) {
       throw error;
     }
   }
@@ -498,11 +521,17 @@ export async function listMyWorkspaces() {
     .map((membership) => getMembershipWorkspace(membership))
     .filter((workspace): workspace is WorkspaceRecord => Boolean(workspace));
 
-  return dedupeWorkspaces([
+  const merged = dedupeWorkspaces([
     ...ownedTeams,
     ...ownedWorkspaces,
     ...memberWorkspaces,
   ]);
+  merged.sort((a, b) =>
+    (a.name ?? "").localeCompare(b.name ?? "", undefined, {
+      sensitivity: "base",
+    }),
+  );
+  return merged;
 }
 
 export async function createWorkspace(input: CreateWorkspaceInput) {
@@ -693,9 +722,16 @@ export async function getWorkspace(workspaceId: string) {
       throw error;
     }
 
-    return pb
-      .collection(collections.workspaces)
-      .getOne<WorkspaceRecord>(workspaceId);
+    try {
+      return await pb
+        .collection(collections.workspaces)
+        .getOne<WorkspaceRecord>(workspaceId);
+    } catch (fallbackError: unknown) {
+      if (isUnusableLegacyWorkspacesTableError(fallbackError)) {
+        throw error;
+      }
+      throw fallbackError;
+    }
   }
 }
 
