@@ -1,7 +1,10 @@
 import { Link } from "react-router-dom";
+import { useAuth } from "../auth/useAuth";
 import { members, tasks, workspace } from "../lib/demo-data";
 
 export function Home() {
+  const { isAuthenticated } = useAuth();
+
   return (
     <section className="stack-xl">
       <div className="landing-hero">
@@ -16,7 +19,7 @@ export function Home() {
             updates across docs, chats, and task lists.
           </p>
           <div className="row gap-sm wrap">
-            <Link className="button-link" to="/login">
+            <Link className="button-link" to={isAuthenticated ? "/dashboard" : "/login"}>
               Open workspace
             </Link>
             <Link className="button-link button-link-secondary" to="/about">

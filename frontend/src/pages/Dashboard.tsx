@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill } from "../components/StatusPill";
+import { pb } from "../lib/pocketbase";
+import { createDashboardSummary } from "../lib/summary";
 import { useActiveWorkspace } from "../lib/useActiveWorkspace";
 import type { DashboardViewModel } from "../lib/view-models";
 import { loadDashboardViewModel } from "../lib/view-models";
@@ -29,6 +31,123 @@ export function Dashboard() {
       cancelled = true;
     };
   }, [activeWorkspaceId]);
+
+  const [inviteCode, setInviteCode] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [joinStatus, setJoinStatus] = useState("");
+  const [inviteStatus, setInviteStatus] = useState("");
+  const [isJoining, setIsJoining] = useState(false);
+  const [isInviting, setIsInviting] = useState(false);
+  const [workspaceName, setWorkspaceName] = useState("");
+  const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
+  const [createWorkspaceStatus, setCreateWorkspaceStatus] = useState("");
+
+  async function handleCreateWorkspace(e: FormEvent) {
+    e.preventDefault();
+    setIsCreatingWorkspace(true);
+    setCreateWorkspaceStatus("");
+
+    try {
+      if (!model?.id) throw new Error("Not logged in");
+
+      // generate a simple random code
+      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+
+      await pb.collection('workspaces').create({
+        name: workspaceName,
+        inviteCode: code,
+        owner: model.id
+      });
+
+      setCreateWorkspaceStatus(`Successfully created workspace: ${workspaceName} (Code: ${code})`);
+      setWorkspaceName("");
+    } catch (err: any) {
+      console.error(err);
+      setCreateWorkspaceStatus("Failed to create workspace. Please try again.");
+    } finally {
+      setIsCreatingWorkspace(false);
+    }
+  }
+
+  async function handleJoinWorkspace(e: FormEvent) {
+    e.preventDefault();
+    setIsJoining(true);
+    setJoinStatus("");
+
+    try {
+      if (!model?.id) throw new Error("Not logged in");
+
+      const workspaces = await pb.collection('workspaces').getList(1, 1, {
+        filter: `inviteCode = "${inviteCode}"`
+      });
+
+      if (workspaces.items.length === 0) {
+        throw new Error("Workspace not found with that code");
+      }
+
+      const workspaceRecord = workspaces.items[0];
+
+      // Check if user is already in the workspace
+      const existingMembers = await pb.collection('workspace_members').getList(1, 1, {
+        filter: `workspace = "${workspaceRecord.id}" && user = "${model.id}"`
+      });
+
+      if (existingMembers.items.length > 0) {
+        setJoinStatus(`You are already a member of workspace: ${workspaceRecord.name}`);
+        setInviteCode("");
+        return;
+      }
+
+      await pb.collection('workspace_members').create({
+        user: model.id,
+        workspace: workspaceRecord.id,
+        role: "member"
+      });
+
+      setJoinStatus(`Successfully joined workspace: ${workspaceRecord.name}`);
+      setInviteCode("");
+    } catch (err: any) {
+      console.error(err);
+      setJoinStatus(err.message || "Failed to join workspace. Please check the code and try again.");
+    } finally {
+      setIsJoining(false);
+    }
+  }
+
+  async function handleSendInvite(e: FormEvent) {
+    e.preventDefault();
+    setIsInviting(true);
+    setInviteStatus("");
+
+    try {
+      if (!model?.id) throw new Error("Not logged in");
+
+      // Assuming the user is part of a workspace, let's just get their first workspace for now
+      const myWorkspaces = await pb.collection('workspace_members').getList(1, 1, {
+        filter: `user = "${model.id}"`
+      });
+
+      if (myWorkspaces.items.length === 0) {
+        throw new Error("You must be part of a workspace to send invites");
+      }
+
+      const workspaceId = myWorkspaces.items[0].workspace;
+
+      await pb.collection('workspace_invites').create({
+        email: inviteEmail,
+        inviter: model.id,
+        workspace: workspaceId
+      });
+
+      setInviteStatus(`An invite has been sent to ${inviteEmail}`);
+      setInviteEmail("");
+    } catch (err: any) {
+      console.error(err);
+      setInviteStatus(err.message || "Failed to send invite. Please try again.");
+    } finally {
+      setIsInviting(false);
+    }
+  }
 
   const recentActivity = useMemo(() => {
     if (!data) {
@@ -64,8 +183,8 @@ export function Dashboard() {
       <section className="stack-lg">
         <PageHeader
           eyebrow="Dashboard"
-          title={`Welcome back, ${model?.email ?? "workspace member"}`}
-          description="Loading your workspace overview and the next places to jump into work."
+          title={`Welcome back, ${model?.email ?? "teammate"}`}
+          description="Loading your workspace summary, recent activity, and live demo signals."
         />
       </section>
     );
@@ -79,6 +198,19 @@ export function Dashboard() {
     0,
   );
   const dueTodayTasks = tasks.filter((task) => task.dueDate === "Today");
+  const recentSnapshot = documents
+    .flatMap((document) =>
+      document.versions.map((version) => ({
+        documentTitle: document.title,
+        label: version.label,
+        author: version.author,
+        createdAt: version.createdAt,
+      })),
+    )
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .at(0);
+
+  const openTasks = tasks.filter((task) => task.status !== "Done");
   const activeWorkspaceName = activeWorkspace?.name ?? workspace.name;
 
   return (

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type SubmitEvent } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { createDocument, listWorkspaceDocumentsWithExpand } from "../lib/api";
 import { documentOwnerEmail, formatDocumentTimestamp } from "../lib/display";
@@ -11,10 +11,7 @@ export function Documents() {
   const [documents, setDocuments] = useState<DocumentRecordWithExpand[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-  const [pendingCreate, setPendingCreate] = useState(false);
+  const [pendingUpload, setPendingUpload] = useState(false);
 
   useEffect(() => {
     if (!activeWorkspace) {
@@ -58,34 +55,56 @@ export function Documents() {
     };
   }, [activeWorkspace]);
 
-  async function onCreateDocument(event: SubmitEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function onFileUpload(
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
 
-    if (!activeWorkspace) {
+    if (!file || !activeWorkspace) {
       return;
     }
 
-    setPendingCreate(true);
+    setPendingUpload(true);
     setError(null);
 
     try {
+      let title = file.name;
+      const lowerName = file.name.toLowerCase();
+
+      if (lowerName.endsWith(".docx")) {
+        title = file.name.replace(/\.docx$/i, "");
+      } else if (lowerName.endsWith(".docm")) {
+        title = file.name.replace(/\.docm$/i, "");
+      } else if (lowerName.endsWith(".xlsx")) {
+        title = file.name.replace(/\.xlsx$/i, "");
+      } else if (lowerName.endsWith(".xlsm")) {
+        title = file.name.replace(/\.xlsm$/i, "");
+      } else if (lowerName.endsWith(".pptx")) {
+        title = file.name.replace(/\.pptx$/i, "");
+      } else if (lowerName.endsWith(".pptm")) {
+        title = file.name.replace(/\.pptm$/i, "");
+      } else if (lowerName.endsWith(".pdf")) {
+        title = file.name.replace(/\.pdf$/i, "");
+      } else {
+        throw new Error("Unsupported file type");
+      }
+
       const nextDocument = await createDocument({
         workspaceId: activeWorkspace.id,
-        title,
-        currentContent: content,
+        title: title,
+        file: file,
       });
 
       setDocuments((current) => [nextDocument, ...current]);
-      setTitle("");
-      setContent("");
-    } catch (createError: unknown) {
+    } catch (uploadError: unknown) {
       setError(
-        createError instanceof Error
-          ? createError.message
-          : "Unable to create document",
+        uploadError instanceof Error
+          ? uploadError.message
+          : "Unable to upload document",
       );
     } finally {
-      setPendingCreate(false);
+      setPendingUpload(false);
     }
   }
 
@@ -207,30 +226,18 @@ export function Documents() {
           </div>
 
           <label className="field">
-            <span>Title</span>
+            <span>Select DOCX, XLSX, PPTX, or PDF file</span>
             <input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="Launch brief"
-              required
-              disabled={!activeWorkspace}
+              type="file"
+              accept=".docx,.docm,.xlsx,.xlsm,.pptx,.pptm,.pdf"
+              onChange={onFileUpload}
+              disabled={!activeWorkspace || pendingUpload}
             />
           </label>
 
-          <label className="field">
-            <span>Initial content</span>
-            <textarea
-              className="textarea"
-              value={content}
-              onChange={(event) => setContent(event.target.value)}
-              placeholder="Write the first version of the document here..."
-              disabled={!activeWorkspace}
-            />
-          </label>
-
-          <button type="submit" disabled={!activeWorkspace || pendingCreate}>
-            {pendingCreate ? "Creating..." : "Create document"}
-          </button>
+          <p className="muted">
+            The uploaded file will be parsed and saved as a new document immediately.
+          </p>
         </form>
 
         <section className="panel stack documents-guide-card">
@@ -329,6 +336,12 @@ export function Documents() {
                   {document.visibility}
                 </StatusPill>
               </div>
+              <StatusPill
+                tone={document.visibility === "workspace" ? "accent" : "warning"}
+              >
+                {document.visibility}
+              </StatusPill>
+            </div>
 
               <div className="document-version-strip">
                 <div className="version-chip">
