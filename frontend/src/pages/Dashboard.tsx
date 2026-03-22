@@ -3,10 +3,10 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill } from "../components/StatusPill";
+import { createDashboardSummary } from "../lib/summary";
 import { useActiveWorkspace } from "../lib/useActiveWorkspace";
 import type { DashboardViewModel } from "../lib/view-models";
 import { loadDashboardViewModel } from "../lib/view-models";
-import { createDashboardSummary } from "../lib/summary";
 
 export function Dashboard() {
   const { model } = useAuth();
@@ -37,7 +37,7 @@ export function Dashboard() {
         <PageHeader
           eyebrow="Dashboard"
           title={`Welcome back, ${model?.email ?? "teammate"}`}
-          description="Loading your workspace summary, recent activity, and live demo signals."
+          description="Loading your workspace status, ownership board, decision log, and version history."
         />
       </section>
     );
@@ -58,11 +58,6 @@ export function Dashboard() {
     0,
   );
   const dueTodayTasks = tasks.filter((task) => task.dueDate === "Today");
-  const progressPercent = tasks.length
-    ? Math.round((completedTasks.length / tasks.length) * 100)
-    : 0;
-  const priorityTasks = openTasks.slice(0, 2);
-  const nextUpTasks = openTasks.slice(2, 4);
   const recentSnapshot = documents
     .flatMap((document) =>
       document.versions.map((version) => ({
@@ -75,265 +70,197 @@ export function Dashboard() {
     .at(-1);
 
   return (
-    <section className="dashboard-shell stack-lg">
+    <section className="stack-lg">
       <PageHeader
         eyebrow="Dashboard"
         title={`Welcome back, ${model?.email ?? "teammate"}`}
-        description="This is the hackathon control center for progress, handoffs, and demo readiness."
+        description="A clearer PRD-aligned view of change tracking, task ownership, decision logging, and team momentum."
         actions={
           <div className="row gap-sm wrap">
             <Link className="button-link" to="/workspace">
-              Open workspace
+              Workspace
             </Link>
             <Link className="button-link button-link-secondary" to="/documents">
-              Review documents
+              Documents
+            </Link>
+            <Link className="button-link button-link-secondary" to="/tasks">
+              Tasks
             </Link>
           </div>
         }
       />
 
-      {source === "demo" ? (
-        <div className="panel">
-          <p className="muted">Showing demo fallback data.</p>
+      <section className="panel stack">
+        <div className="row space-between wrap gap-sm">
+          <div>
+            <p className="eyebrow">Workspace pulse</p>
+            <h2>{workspace.name}</h2>
+            <p className="dashboard-section-note">{summary.headline}</p>
+          </div>
+          <StatusPill tone={source === "live" ? "success" : "warning"}>
+            {source === "live" ? "Live PocketBase data" : "Demo fallback"}
+          </StatusPill>
+        </div>
+
+        <div className="meta-grid">
+          <span>{members.length} collaborators</span>
+          <span>{openTasks.length} open tasks</span>
+          <span>{decisions.length} logged decisions</span>
+          <span>Invite code {workspace.inviteCode}</span>
+        </div>
+
+        {source === "demo" ? (
           <p className="muted">
             {data.error
-              ? `Live PocketBase data failed to load: ${data.error}`
-              : "PocketBase collections and seed data are not available for this user yet."}
+              ? `Live workspace data failed to load: ${data.error}`
+              : "PocketBase data is not ready yet for this user, so the dashboard is showing seeded demo content."}
           </p>
-        </div>
-      ) : null}
-
-      <section className="dashboard-hero panel">
-        <div className="dashboard-hero-copy">
-          <p className="eyebrow">Live demo frame</p>
-          <h2>{workspace.name}</h2>
-          <p className="dashboard-hero-text">{workspace.milestone}</p>
-          <div className="dashboard-hero-meta">
-            <span>{members.length} teammates</span>
-            <span>{openTasks.length} active tasks</span>
-            <span>{totalSnapshots} named snapshots</span>
-            <span>Invite code {workspace.inviteCode}</span>
-          </div>
-        </div>
-
-        <div className="dashboard-focus-card">
-          <div className="row space-between wrap gap-sm">
-            <strong>Your focus today</strong>
-            <StatusPill tone="accent">{workspace.focus}</StatusPill>
-          </div>
-          <div className="dashboard-focus-strip">
-            <Link className="dashboard-focus-link" to="/documents">
-              Compare latest snapshot
-            </Link>
-            <div className="dashboard-progress">
-              <div className="dashboard-progress-top">
-                <span>{dueTodayTasks.length} tasks due today</span>
-                <strong>{progressPercent}%</strong>
-              </div>
-              <div className="dashboard-progress-bar">
-                <span style={{ width: `${progressPercent}%` }} />
-              </div>
-            </div>
-          </div>
-          <p className="muted">{summary.headline}</p>
-        </div>
+        ) : null}
       </section>
 
-      <section className="dashboard-kpi panel">
-        <div className="dashboard-kpi-item">
-          <span className="dashboard-kpi-label">Tasks</span>
-          <strong>{tasks.length}</strong>
-        </div>
-        <div className="dashboard-kpi-item">
-          <span className="dashboard-kpi-label">Decisions</span>
-          <strong>{decisions.length}</strong>
-        </div>
-        <div className="dashboard-kpi-item">
-          <span className="dashboard-kpi-label">Docs</span>
-          <strong>{documents.length}</strong>
-        </div>
-        <div className="dashboard-kpi-item">
-          <span className="dashboard-kpi-label">Snapshots</span>
-          <strong>{totalSnapshots}</strong>
-        </div>
-      </section>
+      <div className="stats-grid">
+        <article className="stat-card dashboard-metric-card">
+          <span className="dashboard-kpi-label">Version History</span>
+          <strong className="stat-value">{totalSnapshots}</strong>
+          <p>Named snapshots across {documents.length} documents</p>
+        </article>
+        <article className="stat-card dashboard-metric-card">
+          <span className="dashboard-kpi-label">Task Ownership</span>
+          <strong className="stat-value">{openTasks.length}</strong>
+          <p>
+            Open tasks, with {dueTodayTasks.length} due today
+          </p>
+        </article>
+        <article className="stat-card dashboard-metric-card">
+          <span className="dashboard-kpi-label">Decision Log</span>
+          <strong className="stat-value">{decisions.length}</strong>
+          <p>Structured decisions captured for the project</p>
+        </article>
+        <article className="stat-card dashboard-metric-card">
+          <span className="dashboard-kpi-label">Delivery Progress</span>
+          <strong className="stat-value">
+            {tasks.length ? Math.round((completedTasks.length / tasks.length) * 100) : 0}%
+          </strong>
+          <p>{completedTasks.length} of {tasks.length} tasks completed</p>
+        </article>
+      </div>
 
-      <div className="dashboard-grid">
-        <section className="dashboard-card dashboard-card-wide">
+      <div className="two-column">
+        <section className="panel stack">
           <div className="row space-between wrap">
-            <h2>Critical now</h2>
+            <h2>Version Control and Change Tracking</h2>
+            <Link to="/documents">Open documents</Link>
+          </div>
+
+          <div className="document-callout">
+            <strong>Latest snapshot</strong>
+            <p>
+              {recentSnapshot
+                ? `${recentSnapshot.label} on ${recentSnapshot.documentTitle}`
+                : "No snapshots yet"}
+            </p>
+            <span className="muted">
+              {recentSnapshot
+                ? `${recentSnapshot.author} • ${recentSnapshot.createdAt}`
+                : "Create the first named snapshot from a document detail page."}
+            </span>
+          </div>
+
+          <div className="feature-checklist">
+            {documents.slice(0, 3).map((document) => (
+              <article key={document.id} className="feature-check">
+                <strong>{document.title}</strong>
+                <p>
+                  {document.versions.length} snapshot
+                  {document.versions.length === 1 ? "" : "s"} • {document.status}
+                </p>
+                <p className="muted">{document.owner}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="panel stack">
+          <div className="row space-between wrap">
+            <h2>Task and Ownership Management</h2>
             <Link to="/tasks">Open task board</Link>
           </div>
-          <div className="dashboard-checklist">
-            {priorityTasks.map((task) => (
-              <label key={task.id} className="dashboard-check-item">
-                <input type="checkbox" checked={task.status === "Done"} readOnly />
-                <div>
+
+          <div className="feature-checklist">
+            {openTasks.slice(0, 4).map((task) => (
+              <article key={task.id} className="feature-check">
+                <div className="row space-between wrap gap-sm">
                   <strong>{task.title}</strong>
-                  <p className="muted">
-                    {task.assignee} • {task.linkedDocument} • due {task.dueDate}
-                  </p>
+                  <StatusPill
+                    tone={task.priority === "High" ? "warning" : "accent"}
+                  >
+                    {task.priority}
+                  </StatusPill>
                 </div>
-                <StatusPill
-                  tone={task.priority === "High" ? "warning" : "accent"}
-                >
-                  {task.priority}
-                </StatusPill>
-              </label>
-            ))}
-          </div>
-        </section>
-
-        <section className="dashboard-card">
-          <div className="row space-between wrap">
-            <h2>Contributors</h2>
-            <StatusPill
-              tone={summary.overdueTasks.length ? "warning" : "success"}
-            >
-              {summary.overdueTasks.length ? "Needs attention" : "Healthy"}
-            </StatusPill>
-          </div>
-          <div className="dashboard-contributors">
-            {summary.contributorStats.map((member) => {
-              const details = members.find((entry) => entry.name === member.name);
-
-              return (
-                <article key={member.name} className="dashboard-contributor">
-                  <div className="dashboard-avatar">
-                    {details?.initials ?? member.name.slice(0, 2).toUpperCase()}
-                  </div>
-                  <div>
-                    <strong>{member.name}</strong>
-                    <p className="muted">{member.contributions} updates</p>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="dashboard-card">
-          <div className="row space-between wrap">
-            <h2>Up next</h2>
-            <StatusPill tone="accent">Ownership</StatusPill>
-          </div>
-          <div className="dashboard-checklist">
-            {nextUpTasks.map((task) => (
-              <label key={task.id} className="dashboard-check-item">
-                <input type="checkbox" checked={false} readOnly />
-                <div>
-                  <strong>{task.title}</strong>
-                  <p className="muted">{task.assignee}</p>
-                </div>
-              </label>
-            ))}
-          </div>
-        </section>
-
-        <section className="dashboard-card dashboard-card-tall">
-          <div className="row space-between wrap">
-            <h2>Version control</h2>
-            <Link to="/documents">Open history</Link>
-          </div>
-          <div className="dashboard-vc-stack">
-            <div className="dashboard-vc-callout">
-              <strong>Latest snapshot</strong>
-              <p>
-                {recentSnapshot
-                  ? `${recentSnapshot.label} on ${recentSnapshot.documentTitle}`
-                  : "No snapshots yet"}
-              </p>
-              <span className="muted">
-                {recentSnapshot
-                  ? `${recentSnapshot.author} • ${recentSnapshot.createdAt}`
-                  : "Create the first named version from a document detail page."}
-              </span>
-            </div>
-            <div className="dashboard-vc-mini-grid">
-              <div className="dashboard-vc-mini">
-                <strong>{totalSnapshots}</strong>
-                <span>Named commits</span>
-              </div>
-              <div className="dashboard-vc-mini">
-                <strong>{documents.length}</strong>
-                <span>Diff-ready docs</span>
-              </div>
-            </div>
-            <ul className="dashboard-mini-list">
-              <li>Named snapshots create clear review checkpoints.</li>
-              <li>Diff compare is ready from the document detail page.</li>
-              <li>Restore points are visible even before full rollback lands.</li>
-            </ul>
-          </div>
-        </section>
-
-        <section className="dashboard-card">
-          <div className="row space-between wrap">
-            <h2>Recent activity</h2>
-            <StatusPill tone="accent">Auto-generated</StatusPill>
-          </div>
-          <div className="dashboard-activity">
-            {summary.recentActivity.slice(0, 4).map((item) => (
-              <article
-                key={`${item.type}-${item.id}`}
-                className="dashboard-activity-item"
-              >
-                <div>
-                  <strong>{item.label}</strong>
-                  <p>{item.detail}</p>
-                </div>
-                <span className="muted">{item.timestamp}</span>
+                <p>
+                  {task.assignee} • {task.status}
+                </p>
+                <p className="muted">
+                  {task.linkedDocument} • due {task.dueDate}
+                </p>
               </article>
             ))}
-          </div>
-        </section>
-
-        <section className="dashboard-card">
-          <div className="row space-between wrap">
-            <h2>Decision log</h2>
-            <Link to="/decisions">View all</Link>
-          </div>
-          <div className="dashboard-activity">
-            {decisions.slice(0, 3).map((decision) => (
-              <article key={decision.id} className="dashboard-activity-item">
-                <div>
-                  <strong>{decision.title}</strong>
-                  <p>{decision.outcome}</p>
-                </div>
-                <span className="muted">{decision.date}</span>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="dashboard-card">
-          <div className="row space-between wrap">
-            <h2>Deadlines</h2>
-            <StatusPill tone={dueTodayTasks.length ? "warning" : "success"}>
-              {dueTodayTasks.length ? "Due today" : "Clear"}
-            </StatusPill>
-          </div>
-          <div className="dashboard-deadlines">
-            <div className="deadline-group">
-              <strong>Due today ({dueTodayTasks.length})</strong>
-              <p className="muted">
-                {dueTodayTasks.map((task) => task.title).join(", ") ||
-                  "Nothing urgent"}
-              </p>
-            </div>
-            <div className="deadline-group">
-              <strong>Upcoming ({openTasks.length - dueTodayTasks.length})</strong>
-              <p className="muted">
-                {openTasks
-                  .filter((task) => task.dueDate !== "Today")
-                  .map((task) => task.title)
-                  .join(", ") || "No queued work"}
-              </p>
-            </div>
           </div>
         </section>
       </div>
 
+      <div className="two-column">
+        <section className="panel stack">
+          <div className="row space-between wrap">
+            <h2>Decision Logging</h2>
+            <Link to="/decisions">Open decision log</Link>
+          </div>
+
+          {decisions.slice(0, 3).map((decision) => (
+            <article key={decision.id} className="timeline-item">
+              <div className="row space-between wrap gap-sm">
+                <strong>{decision.title}</strong>
+                <span className="muted">{decision.date}</span>
+              </div>
+              <p>{decision.outcome}</p>
+              <p className="muted">
+                {decision.owner} • linked to {decision.linkedTo}
+              </p>
+            </article>
+          ))}
+        </section>
+
+        <section className="panel stack">
+          <div className="row space-between wrap">
+            <h2>Team Accountability</h2>
+            <StatusPill
+              tone={summary.overdueTasks.length ? "warning" : "success"}
+            >
+              {summary.overdueTasks.length ? "Needs follow-up" : "On track"}
+            </StatusPill>
+          </div>
+
+          <div className="panel-list compact-grid">
+            {summary.contributorStats.map((member) => (
+              <article key={member.name} className="task-card">
+                <div className="row space-between wrap gap-sm">
+                  <strong>{member.name}</strong>
+                  <span className="dashboard-inline-stat">
+                    {member.contributions} updates
+                  </span>
+                </div>
+                <p>{member.focus}</p>
+              </article>
+            ))}
+          </div>
+
+          <div className="document-callout">
+            <strong>What to say in the demo</strong>
+            <p>{summary.narrative[0]}</p>
+            <span className="muted">{summary.narrative[1]}</span>
+          </div>
+        </section>
+      </div>
     </section>
   );
 }

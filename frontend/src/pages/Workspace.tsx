@@ -9,6 +9,19 @@ function getMemberLabel(member: WorkspaceMemberWithExpand) {
   return member.expand?.user?.name || member.expand?.user?.email || member.user;
 }
 
+function getMemberRole(
+  member: WorkspaceMemberWithExpand,
+  activeWorkspaceOwnerId?: string,
+) {
+  if (member.role) {
+    return member.role;
+  }
+
+  return activeWorkspaceOwnerId && member.user === activeWorkspaceOwnerId
+    ? "owner"
+    : "member";
+}
+
 function getInitials(value: string) {
   return value
     .split(/\s+/)
@@ -16,6 +29,10 @@ function getInitials(value: string) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
+}
+
+function getWorkspaceInviteCode(workspace: { inviteCode?: string; code?: string }) {
+  return workspace.inviteCode ?? workspace.code ?? "";
 }
 
 export function Workspace() {
@@ -35,6 +52,7 @@ export function Workspace() {
   const [membersError, setMembersError] = useState<string | null>(null);
 
   const [createName, setCreateName] = useState("");
+  const [createInviteCode, setCreateInviteCode] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<"create" | "join" | null>(null);
@@ -93,8 +111,10 @@ export function Workspace() {
       await createWorkspaceAndSelect({
         name: createName,
         description: "",
+        inviteCode: createInviteCode,
       });
       setCreateName("");
+      setCreateInviteCode("");
     } catch (createError: unknown) {
       setActionError(
         createError instanceof Error
@@ -204,7 +224,9 @@ export function Workspace() {
               <div className="stack">
                 <p className="eyebrow">Invite code</p>
                 <h3>{activeWorkspace.name}</h3>
-                <p className="workspace-invite-code">{activeWorkspace.inviteCode}</p>
+                <p className="workspace-invite-code">
+                  {getWorkspaceInviteCode(activeWorkspace)}
+                </p>
                 <p>{activeWorkspace.description || "No description yet."}</p>
               </div>
               <div className="row wrap gap-sm">
@@ -244,7 +266,7 @@ export function Workspace() {
                     <span>{getInitials(label)}</span>
                     <div>
                       <strong>{label}</strong>
-                      <p>{member.role}</p>
+                      <p>{getMemberRole(member, activeWorkspace?.owner)}</p>
                     </div>
                   </div>
                 );
@@ -270,6 +292,17 @@ export function Workspace() {
               value={createName}
               onChange={(event) => setCreateName(event.target.value)}
               placeholder="Workspace name"
+              required
+            />
+          </label>
+          <label className="field">
+            <span>Invite code</span>
+            <input
+              value={createInviteCode}
+              onChange={(event) =>
+                setCreateInviteCode(event.target.value.toUpperCase())
+              }
+              placeholder="PRODUHACK"
               required
             />
           </label>

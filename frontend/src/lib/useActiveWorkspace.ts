@@ -112,6 +112,7 @@ export function useActiveWorkspace() {
   async function createWorkspaceAndSelect(input: {
     name: string;
     description?: string;
+    inviteCode: string;
   }) {
     const workspace = await createWorkspace(input);
     await refresh();

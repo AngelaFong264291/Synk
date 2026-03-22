@@ -127,7 +127,7 @@ function mapWorkspace(
   return {
     id: workspace.id,
     name: workspace.name,
-    inviteCode: workspace.inviteCode,
+    inviteCode: workspace.inviteCode ?? workspace.code ?? "",
     focus: "Hackathon MVP",
     milestone: `${memberCount} collaborator${memberCount === 1 ? "" : "s"} active`,
   };
@@ -140,7 +140,7 @@ function mapMembers(members: WorkspaceMemberWithExpand[]): Member[] {
     return {
       id: member.id,
       name,
-      role: titleCase(member.role),
+      role: titleCase(member.role ?? "member"),
       initials: initials(name),
     };
   });

@@ -200,10 +200,23 @@ This avoids duplicating collection names and field names across pages.
 
 1. Start PocketBase with `docker compose up` from [pocketbase/docker-compose.yml](/Users/hoimingfong/Sync/pocketbase/docker-compose.yml).
 2. Open the admin UI at `http://127.0.0.1:8090/_/`.
-3. Create or update the collections above with the exact field names in this doc.
+3. Apply the repo migrations or create/update the collections above with the exact field names in this doc.
 4. Add the recommended rules.
 5. Seed the demo records.
 6. Log in from the frontend and use the shared API layer for CRUD.
+
+### Migration note
+
+The repo now includes [1700000006_create_synk_mvp_collections.js](/Users/hoimingfong/Sync/pocketbase/pb_migrations/1700000006_create_synk_mvp_collections.js), which creates the Synk MVP collections used by the live Workspace, Documents, Tasks, Dashboard, and Decisions pages:
+
+- `workspaces`
+- `workspace_members`
+- `documents`
+- `document_versions`
+- `tasks`
+- `decisions`
+
+If your local PocketBase still only has legacy `teams` / `team_members` collections, restart PocketBase so the migration runs, then seed at least one workspace and one membership before testing the Tasks page.
 
 ## Team Notes
 

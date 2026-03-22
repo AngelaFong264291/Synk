@@ -919,6 +919,21 @@ ul {
   color: var(--text-soft);
 }
 
+.dashboard-section-note {
+  max-width: 44rem;
+  font-size: 1.02rem;
+}
+
+.dashboard-metric-card {
+  gap: 0.3rem;
+}
+
+.dashboard-inline-stat {
+  color: var(--accent);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
 .dashboard-kpi-item strong {
   font-size: 2rem;
   letter-spacing: -0.04em;
