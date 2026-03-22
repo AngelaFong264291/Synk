@@ -15,7 +15,7 @@ describe("Home", () => {
     );
     expect(
       screen.getByRole("heading", {
-        name: /synk gives your workspace one place to track changes/i,
+        name: /keep docs, ownership, and momentum in one polished workspace/i,
       }),
     ).toBeInTheDocument();
   });

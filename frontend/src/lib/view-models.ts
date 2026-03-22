@@ -155,7 +155,7 @@ function mapVersion(version: DocumentVersionRecordWithExpand): DocumentVersion {
     author: authorName,
     createdAt: formatDateTime(version.created),
     summary: `Snapshot by ${authorName}`,
-    content: version.content,
+    content: "",
   };
 }
 
