@@ -46,7 +46,7 @@ function statusLabel(status: Task["status"]) {
 function createActivityFeed(input: DashboardSummaryInput): ActivityItem[] {
   const versionActivity = input.documents.flatMap((document) =>
     document.versions.map((version) => ({
-      id: version.id,
+      id: `${document.id}-${version.id}`,
       label: version.label,
       detail: `${document.title} snapshot saved`,
       actor: version.author,
