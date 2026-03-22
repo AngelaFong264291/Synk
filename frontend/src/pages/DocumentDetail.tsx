@@ -96,9 +96,12 @@ function formatVersionAuthor(version: DocumentVersionRecordWithExpand) {
   return user.email?.trim() || user.name?.trim() || "Unknown";
 }
 
-function getRawFileUrlForRecord(record: any, fileField: string) {
-  const file = record[fileField];
-  if (!file) return null;
+function getRawFileUrlForRecord(
+  record: DocumentRecordWithExpand | DocumentVersionRecordWithExpand,
+  fileField: string,
+) {
+  const file = (record as Record<string, unknown>)[fileField];
+  if (typeof file !== "string" || !file) return null;
   let baseUrl = pb.files.getURL(record, file);
   const publicPocketBaseUrl = import.meta.env.VITE_PUBLIC_POCKETBASE_URL;
   if (publicPocketBaseUrl) {
@@ -134,10 +137,13 @@ function getRawFileUrlForRecord(record: any, fileField: string) {
   return baseUrl;
 }
 
-function getFilePreviewUrlForRecord(record: any, fileField: string) {
-  const file = record[fileField];
-  if (!file) return null;
-  const fileName = file.toLowerCase() || "";
+function getFilePreviewUrlForRecord(
+  record: DocumentRecordWithExpand | DocumentVersionRecordWithExpand,
+  fileField: string,
+) {
+  const raw = (record as Record<string, unknown>)[fileField];
+  if (typeof raw !== "string" || !raw) return null;
+  const fileName = raw.toLowerCase() || "";
   const baseUrl = getRawFileUrlForRecord(record, fileField);
   if (!baseUrl) return null;
 
@@ -160,6 +166,11 @@ function getFilePreviewUrlForRecord(record: any, fileField: string) {
 
     const publicPocketBaseUrl = import.meta.env.VITE_PUBLIC_POCKETBASE_URL;
     // Only block on localhost if no public override is provided.
+    if (isLocal && !publicPocketBaseUrl) {
+      return null;
+    }
+
+    const encodedUrl = encodeURIComponent(baseUrl);
     return `https://view.officeapps.live.com/op/embed.aspx?src=${encodedUrl}`;
   }
 
@@ -177,7 +188,8 @@ export function DocumentDetail() {
   const [snapshotPending, setSnapshotPending] = useState(false);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
 
-  const [previewVersion, setPreviewVersion] = useState<DocumentVersionRecordWithExpand | null>(null);
+  const [previewVersion, setPreviewVersion] =
+    useState<DocumentVersionRecordWithExpand | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -318,9 +330,19 @@ export function DocumentDetail() {
               {getRawFileUrl(bundle.document)}
             </code>
             <button
-          >
-            Paste the File URL in a new tab. If it doesn't download the file,
-            your tunnel or PocketBase permissions are not set correctly.
+              type="button"
+              onClick={() => {
+                const url = getRawFileUrl(bundle.document);
+                if (url) window.open(url, "_blank", "noopener,noreferrer");
+              }}
+            >
+              Open raw URL
+            </button>
+          </div>
+          <p style={{ marginTop: "0.5rem", marginBottom: 0 }}>
+            Paste the file URL in a new tab if needed. If it does not download
+            the file, your tunnel or PocketBase permissions are not set
+            correctly.
           </p>
         </div>
       )}
@@ -329,28 +351,28 @@ export function DocumentDetail() {
         {previewVersion && (
           <div className="row space-between wrap">
             <h3>Previewing snapshot: {previewVersion.versionName}</h3>
-          const previewRecord = bundle.document;
-          const previewUrl = getFilePreviewUrl(bundle.document);
-            >
+            <button type="button" onClick={() => setPreviewVersion(null)}>
               Back to current
             </button>
           </div>
         )}
         {(() => {
-          const previewRecord = previewVersion || bundle.document;
-          const previewUrl = getFilePreviewUrl(previewRecord);
+          const previewRecord = previewVersion ?? bundle.document;
+          const previewUrl = previewVersion
+            ? getFilePreviewUrlForRecord(previewVersion, "file")
+            : getFilePreviewUrl(bundle.document);
           const fileName = previewRecord.file?.toLowerCase() || "";
 
           return previewUrl ? (
             <div className="stack">
               <iframe
-                key={'current'}
+                key={previewVersion ? previewVersion.id : "current"}
+                src={previewUrl}
                 width="100%"
                 height="800px"
                 frameBorder="0"
                 style={{ borderRadius: "12px", background: "#f1f5f9" }}
                 title="Document preview"
-                key={previewVersion ? previewVersion.id : 'current'}
               />
             </div>
           ) : (
@@ -442,7 +464,8 @@ export function DocumentDetail() {
           <div className="row space-between wrap gap-sm">
             <h3>Create snapshot</h3>
             <p className="muted small" style={{ maxWidth: "28rem" }}>
-              Upload a new version of the file, which will update the document's file and create a named version.
+              Upload a new version of the file, which will update the document's
+              file and create a named version.
             </p>
           </div>
 
@@ -494,26 +517,37 @@ export function DocumentDetail() {
           {bundle.versions.length > 0 ? (
             <div className="list stack-sm">
               {bundle.versions.map(
-                      <a
-                        href={getFilePreviewUrlForRecord(version, "file") || getRawFileUrlForRecord(version, "file")}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      </a>
-                  >
-                    <div className="stack-xs">
-                      <button
-                        className="button-link"
-                        onClick={() => setPreviewVersion(version)}
-                      >
-                        <strong>{version.versionName}</strong>
-                      </button>
-                      <p className="muted small">
-                        {formatVersionAuthor(version)} ·{" "}
-                        {new Date(version.created).toLocaleString()}
-                      </p>
+                (version: DocumentVersionRecordWithExpand) => {
+                  const fileHref =
+                    getFilePreviewUrlForRecord(version, "file") ||
+                    getRawFileUrlForRecord(version, "file");
+                  return (
+                    <div key={version.id} className="list-row panel-sm">
+                      <div className="stack-xs">
+                        <button
+                          type="button"
+                          className="button-link"
+                          onClick={() => setPreviewVersion(version)}
+                        >
+                          <strong>{version.versionName}</strong>
+                        </button>
+                        <p className="muted small">
+                          {formatVersionAuthor(version)} ·{" "}
+                          {new Date(version.created).toLocaleString()}
+                        </p>
+                      </div>
+                      {fileHref ? (
+                        <a
+                          href={fileHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Open file
+                        </a>
+                      ) : null}
                     </div>
-                  </div>
-                ),
+                  );
+                },
               )}
             </div>
           ) : (
