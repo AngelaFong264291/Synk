@@ -28,9 +28,9 @@ function getRawFileUrl(document: DocumentRecordWithExpand) {
       let path = urlObj.pathname;
       if (publicUrlObj.pathname !== "/") {
         path =
-          publicUrlObj.pathname.replace(/\/$/, "") +
-          "/" +
-          path.replace(/^\//, "");
+            publicUrlObj.pathname.replace(/\/$/, "") +
+            "/" +
+            path.replace(/^\//, "");
       }
       urlObj.pathname = path;
       if (urlObj.host.includes("ngrok")) {
@@ -61,17 +61,17 @@ function getFilePreviewUrl(document: DocumentRecordWithExpand) {
   }
 
   if (
-    fileName.endsWith(".docx") ||
-    fileName.endsWith(".docm") ||
-    fileName.endsWith(".xlsx") ||
-    fileName.endsWith(".xlsm") ||
-    fileName.endsWith(".pptx") ||
-    fileName.endsWith(".pptm")
+      fileName.endsWith(".docx") ||
+      fileName.endsWith(".docm") ||
+      fileName.endsWith(".xlsx") ||
+      fileName.endsWith(".xlsm") ||
+      fileName.endsWith(".pptx") ||
+      fileName.endsWith(".pptm")
   ) {
     const isLocal =
-      window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1" ||
-      window.location.hostname === "[::1]";
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1" ||
+        window.location.hostname === "[::1]";
 
     const publicPocketBaseUrl = import.meta.env.VITE_PUBLIC_POCKETBASE_URL;
     // Only block on localhost if no public override is provided.
@@ -96,12 +96,9 @@ function formatVersionAuthor(version: DocumentVersionRecordWithExpand) {
   return user.email?.trim() || user.name?.trim() || "Unknown";
 }
 
-function getRawFileUrlForRecord(
-  record: DocumentRecordWithExpand | DocumentVersionRecordWithExpand,
-  fileField: string,
-) {
-  const file = (record as Record<string, unknown>)[fileField];
-  if (typeof file !== "string" || !file) return null;
+function getRawFileUrlForRecord(record: any, fileField: string) {
+  const file = record[fileField];
+  if (!file) return null;
   let baseUrl = pb.files.getURL(record, file);
   const publicPocketBaseUrl = import.meta.env.VITE_PUBLIC_POCKETBASE_URL;
   if (publicPocketBaseUrl) {
@@ -114,9 +111,9 @@ function getRawFileUrlForRecord(
       let path = urlObj.pathname;
       if (publicUrlObj.pathname !== "/") {
         path =
-          publicUrlObj.pathname.replace(/\/$/, "") +
-          "/" +
-          path.replace(/^\//, "");
+            publicUrlObj.pathname.replace(/\/$/, "") +
+            "/" +
+            path.replace(/^\//, "");
       }
       urlObj.pathname = path;
       if (urlObj.host.includes("ngrok")) {
@@ -137,13 +134,10 @@ function getRawFileUrlForRecord(
   return baseUrl;
 }
 
-function getFilePreviewUrlForRecord(
-  record: DocumentRecordWithExpand | DocumentVersionRecordWithExpand,
-  fileField: string,
-) {
-  const raw = (record as Record<string, unknown>)[fileField];
-  if (typeof raw !== "string" || !raw) return null;
-  const fileName = raw.toLowerCase() || "";
+function getFilePreviewUrlForRecord(record: any, fileField: string) {
+  const file = record[fileField];
+  if (!file) return null;
+  const fileName = file.toLowerCase() || "";
   const baseUrl = getRawFileUrlForRecord(record, fileField);
   if (!baseUrl) return null;
 
@@ -152,17 +146,17 @@ function getFilePreviewUrlForRecord(
   }
 
   if (
-    fileName.endsWith(".docx") ||
-    fileName.endsWith(".docm") ||
-    fileName.endsWith(".xlsx") ||
-    fileName.endsWith(".xlsm") ||
-    fileName.endsWith(".pptx") ||
-    fileName.endsWith(".pptm")
+      fileName.endsWith(".docx") ||
+      fileName.endsWith(".docm") ||
+      fileName.endsWith(".xlsx") ||
+      fileName.endsWith(".xlsm") ||
+      fileName.endsWith(".pptx") ||
+      fileName.endsWith(".pptm")
   ) {
     const isLocal =
-      window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1" ||
-      window.location.hostname === "[::1]";
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1" ||
+        window.location.hostname === "[::1]";
 
     const publicPocketBaseUrl = import.meta.env.VITE_PUBLIC_POCKETBASE_URL;
     // Only block on localhost if no public override is provided.
@@ -188,8 +182,7 @@ export function DocumentDetail() {
   const [snapshotPending, setSnapshotPending] = useState(false);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
 
-  const [previewVersion, setPreviewVersion] =
-    useState<DocumentVersionRecordWithExpand | null>(null);
+  const [previewVersion, setPreviewVersion] = useState<DocumentVersionRecordWithExpand | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -210,9 +203,9 @@ export function DocumentDetail() {
       } catch (loadError: unknown) {
         if (!cancelled) {
           setError(
-            loadError instanceof Error
-              ? loadError.message
-              : "Unable to load document",
+              loadError instanceof Error
+                  ? loadError.message
+                  : "Unable to load document",
           );
         }
       } finally {
@@ -264,7 +257,7 @@ export function DocumentDetail() {
       }
     } catch (err: unknown) {
       setSnapshotError(
-        err instanceof Error ? err.message : "Unable to save snapshot",
+          err instanceof Error ? err.message : "Unable to save snapshot",
       );
     } finally {
       setSnapshotPending(false);
@@ -291,270 +284,251 @@ export function DocumentDetail() {
     return <p className="muted">Document not found.</p>;
   }
   return (
-    <section className="stack-lg">
-      <PageHeader
-        eyebrow="Document detail"
-        title={bundle.document.title}
-        description="Preview the file, upload new versions, and compare version history."
-      />
+      <section className="stack-lg">
+        <PageHeader
+            eyebrow="Document detail"
+            title={bundle.document.title}
+            description="Preview the file, upload new versions, and compare version history."
+        />
 
-      {window.location.hostname === "localhost" && bundle.document.file && (
-        <div
-          style={{
-            padding: "1rem",
-            background: "#f8fafc",
-            border: "1px solid #e2e8f0",
-            borderRadius: "12px",
-            fontSize: "0.875rem",
-          }}
-        >
-          <strong>Developer Debug:</strong>
-          <div
-            style={{
-              marginTop: "0.5rem",
-              display: "flex",
-              gap: "0.5rem",
-              alignItems: "center",
-            }}
-          >
-            <code
-              style={{
-                background: "#eee",
-                padding: "0.2rem 0.4rem",
-                borderRadius: "4px",
-                flex: 1,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              {getRawFileUrl(bundle.document)}
-            </code>
-            <button
-              type="button"
-              onClick={() => {
-                const url = getRawFileUrl(bundle.document);
-                if (url) window.open(url, "_blank", "noopener,noreferrer");
-              }}
-            >
-              Open raw URL
-            </button>
-          </div>
-          <p style={{ marginTop: "0.5rem", marginBottom: 0 }}>
-            Paste the file URL in a new tab if needed. If it does not download
-            the file, your tunnel or PocketBase permissions are not set
-            correctly.
-          </p>
-        </div>
-      )}
-
-      <div className="panel stack">
-        {previewVersion && (
-          <div className="row space-between wrap">
-            <h3>Previewing snapshot: {previewVersion.versionName}</h3>
-            <button type="button" onClick={() => setPreviewVersion(null)}>
-              Back to current
-            </button>
-          </div>
-        )}
-        {(() => {
-          const previewRecord = previewVersion ?? bundle.document;
-          const previewUrl = previewVersion
-            ? getFilePreviewUrlForRecord(previewVersion, "file")
-            : getFilePreviewUrl(bundle.document);
-          const fileName = previewRecord.file?.toLowerCase() || "";
-
-          return previewUrl ? (
-            <div className="stack">
-              <iframe
-                key={previewVersion ? previewVersion.id : "current"}
-                src={previewUrl}
-                width="100%"
-                height="800px"
-                frameBorder="0"
-                style={{ borderRadius: "12px", background: "#f1f5f9" }}
-                title="Document preview"
-              />
-            </div>
-          ) : (
-            <div className="stack">
-              {previewRecord.file &&
-                (fileName.endsWith(".docx") ||
-                  fileName.endsWith(".docm") ||
-                  fileName.endsWith(".xlsx") ||
-                  fileName.endsWith(".xlsm") ||
-                  fileName.endsWith(".pptx") ||
-                  fileName.endsWith(".pptm")) && (
-                  <div
-                    className="warning"
-                    style={{
-                      padding: "0.75rem",
-                      borderRadius: "8px",
-                      background: "rgba(234, 179, 8, 0.1)",
-                      color: "#854d0e",
-                      fontSize: "0.875rem",
-                      marginBottom: "1rem",
-                    }}
-                  >
-                    <p>
-                      <strong>Localhost Preview Notice:</strong> Office Online
-                      Viewer is disabled because it cannot reach your local
-                      server.
-                    </p>
-                    <p style={{ marginTop: "0.5rem" }}>
-                      To enable high-fidelity preview on localhost:
-                    </p>
-                    <ol style={{ marginLeft: "1.5rem", marginTop: "0.25rem" }}>
-                      <li>
-                        Start a tunnel (e.g.,{" "}
-                        <code>
-                          cloudflared tunnel --url http://localhost:8090
-                        </code>
-                        ) to expose your PocketBase server.
-                      </li>
-                      <li>
-                        Set <code>VITE_PUBLIC_POCKETBASE_URL</code> in your{" "}
-                        <code>.env</code> file to the tunnel URL.
-                      </li>
-                      <li>Restart the development server.</li>
-                    </ol>
-                  </div>
-                )}
-              <p className="muted">No preview available for this file type.</p>
-            </div>
-          );
-        })()}
-      </div>
-
-      <div className="row space-between wrap">
-        <Link to="/documents">Back to documents</Link>
-        <StatusPill
-          tone={
-            bundle.document.visibility === "workspace" ? "accent" : "warning"
-          }
-        >
-          {bundle.document.visibility}
-        </StatusPill>
-      </div>
-
-      <div className="stack-lg">
-        <div className="panel stack">
-          <h3>Linked Tasks</h3>
-          {bundle.linkedTasks.length > 0 ? (
-            <div className="list stack-sm">
-              {bundle.linkedTasks.map((task: TaskRecordWithExpand) => (
-                <Link
-                  key={task.id}
-                  to="/tasks"
-                  className="list-row panel-sm no-underline"
-                >
-                  <div className="stack-xs">
-                    <strong>{task.title}</strong>
-                    <p className="muted small">{task.status}</p>
-                  </div>
-                  <span>→</span>
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <p className="muted">No tasks linked to this document.</p>
-          )}
-        </div>
-
-        <div className="panel stack">
-          <div className="row space-between wrap gap-sm">
-            <h3>Create snapshot</h3>
-            <p className="muted small" style={{ maxWidth: "28rem" }}>
-              Upload a new version of the file, which will update the document's
-              file and create a named version.
-            </p>
-          </div>
-
-          <form className="stack form" onSubmit={onCreateSnapshot}>
-            <label className="field">
-              <span>Snapshot name</span>
-              <input
-                type="text"
-                value={snapshotVersionName}
-                onChange={(event) => setSnapshotVersionName(event.target.value)}
-                placeholder="e.g. v1 before stakeholder review"
-                autoComplete="off"
-                disabled={snapshotPending}
-              />
-            </label>
-            <label className="field">
-              <span>Snapshot file</span>
-              <input
-                type="file"
-                onChange={(event) => {
-                  const file = event.target.files?.[0] || null;
-                  setSnapshotFile(file);
-                  if (file) {
-                    setSnapshotError(null);
-                  }
+        {window.location.hostname === "localhost" && bundle.document.file && (
+            <div
+                style={{
+                  padding: "1rem",
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "12px",
+                  fontSize: "0.875rem",
                 }}
-                disabled={snapshotPending}
-              />
-            </label>
-            {snapshotError ? <p className="error">{snapshotError}</p> : null}
-            <div className="row gap-sm wrap">
-              <button type="submit" disabled={snapshotPending}>
-                {snapshotPending ? "Saving snapshot…" : "Save snapshot"}
-              </button>
-              <button
-                type="button"
-                className="button-secondary"
-                onClick={onResetSnapshotBody}
-                disabled={snapshotPending}
+            >
+              <strong>Developer Debug:</strong>
+              <div
+                  style={{
+                    marginTop: "0.5rem",
+                    display: "flex",
+                    gap: "0.5rem",
+                    alignItems: "center",
+                  }}
               >
-                Reset file from current document
-              </button>
+                <code
+                    style={{
+                      background: "#eee",
+                      padding: "0.2rem 0.4rem",
+                      borderRadius: "4px",
+                      flex: 1,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                >
+                  {getRawFileUrl(bundle.document)}
+                </code>
+                <button
+                    onClick={() => navigator.clipboard.writeText(getRawFileUrl(bundle.document) || "")}
+                >
+                  Copy URL
+                </button>
+              </div>
+              <p style={{ marginTop: "0.5rem", color: "#64748b" }}>
+                Paste the File URL in a new tab. If it doesn't download the file,
+                your tunnel or PocketBase permissions are not set correctly.
+              </p>
             </div>
-          </form>
-        </div>
+        )}
 
         <div className="panel stack">
-          <h3>Version history</h3>
-          {bundle.versions.length > 0 ? (
-            <div className="list stack-sm">
-              {bundle.versions.map(
-                (version: DocumentVersionRecordWithExpand) => {
-                  const fileHref =
-                    getFilePreviewUrlForRecord(version, "file") ||
-                    getRawFileUrlForRecord(version, "file");
-                  return (
-                    <div key={version.id} className="list-row panel-sm">
-                      <div className="stack-xs">
-                        <button
-                          type="button"
-                          className="button-link"
-                          onClick={() => setPreviewVersion(version)}
-                        >
-                          <strong>{version.versionName}</strong>
-                        </button>
-                        <p className="muted small">
-                          {formatVersionAuthor(version)} ·{" "}
-                          {new Date(version.created).toLocaleString()}
-                        </p>
-                      </div>
-                      {fileHref ? (
-                        <a
-                          href={fileHref}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          Open file
-                        </a>
-                      ) : null}
-                    </div>
-                  );
-                },
-              )}
-            </div>
-          ) : (
-            <p className="muted">No snapshots yet. Create one above.</p>
+          {previewVersion && (
+              <div className="row space-between wrap">
+                <h3>Previewing snapshot: {previewVersion.versionName}</h3>
+                <button onClick={() => setPreviewVersion(null)}>
+                  Back to current
+                </button>
+              </div>
           )}
+          {(() => {
+            const previewRecord = previewVersion || bundle.document;
+            const previewUrl = getFilePreviewUrl(previewRecord);
+            const fileName = previewRecord.file?.toLowerCase() || "";
+
+            return previewUrl ? (
+                <div className="stack">
+                  <iframe
+                      width="100%"
+                      height="800px"
+                      frameBorder="0"
+                      style={{ borderRadius: "12px", background: "#f1f5f9" }}
+                      title="Document preview"
+                      key={previewVersion ? previewVersion.id : 'current'}
+                  />
+                </div>
+            ) : (
+                <div className="stack">
+                  {previewRecord.file &&
+                      (fileName.endsWith(".docx") ||
+                          fileName.endsWith(".docm") ||
+                          fileName.endsWith(".xlsx") ||
+                          fileName.endsWith(".xlsm") ||
+                          fileName.endsWith(".pptx") ||
+                          fileName.endsWith(".pptm")) && (
+                          <div
+                              className="warning"
+                              style={{
+                                padding: "0.75rem",
+                                borderRadius: "8px",
+                                background: "rgba(234, 179, 8, 0.1)",
+                                color: "#854d0e",
+                                fontSize: "0.875rem",
+                                marginBottom: "1rem",
+                              }}
+                          >
+                            <p>
+                              <strong>Localhost Preview Notice:</strong> Office Online
+                              Viewer is disabled because it cannot reach your local
+                              server.
+                            </p>
+                            <p style={{ marginTop: "0.5rem" }}>
+                              To enable high-fidelity preview on localhost:
+                            </p>
+                            <ol style={{ marginLeft: "1.5rem", marginTop: "0.25rem" }}>
+                              <li>
+                                Start a tunnel (e.g.,{" "}
+                                <code>
+                                  cloudflared tunnel --url http://localhost:8090
+                                </code>
+                                ) to expose your PocketBase server.
+                              </li>
+                              <li>
+                                Set <code>VITE_PUBLIC_POCKETBASE_URL</code> in your{" "}
+                                <code>.env</code> file to the tunnel URL.
+                              </li>
+                              <li>Restart the development server.</li>
+                            </ol>
+                          </div>
+                      )}
+                  <p className="muted">No preview available for this file type.</p>
+                </div>
+            );
+          })()}
         </div>
-      </div>
-    </section>
+
+        <div className="row space-between wrap">
+          <Link to="/documents">Back to documents</Link>
+          <StatusPill
+              tone={
+                bundle.document.visibility === "workspace" ? "accent" : "warning"
+              }
+          >
+            {bundle.document.visibility}
+          </StatusPill>
+        </div>
+
+        <div className="stack-lg">
+          <div className="panel stack">
+            <h3>Linked Tasks</h3>
+            {bundle.linkedTasks.length > 0 ? (
+                <div className="list stack-sm">
+                  {bundle.linkedTasks.map((task: TaskRecordWithExpand) => (
+                      <Link
+                          key={task.id}
+                          to="/tasks"
+                          className="list-row panel-sm no-underline"
+                      >
+                        <div className="stack-xs">
+                          <strong>{task.title}</strong>
+                          <p className="muted small">{task.status}</p>
+                        </div>
+                        <span>→</span>
+                      </Link>
+                  ))}
+                </div>
+            ) : (
+                <p className="muted">No tasks linked to this document.</p>
+            )}
+          </div>
+
+          <div className="panel stack">
+            <div className="row space-between wrap gap-sm">
+              <h3>Create snapshot</h3>
+              <p className="muted small" style={{ maxWidth: "28rem" }}>
+                Upload a new version of the file, which will update the document's file and create a named version.
+              </p>
+            </div>
+
+            <form className="stack form" onSubmit={onCreateSnapshot}>
+              <label className="field">
+                <span>Snapshot name</span>
+                <input
+                    type="text"
+                    value={snapshotVersionName}
+                    onChange={(event) => setSnapshotVersionName(event.target.value)}
+                    placeholder="e.g. v1 before stakeholder review"
+                    autoComplete="off"
+                    disabled={snapshotPending}
+                />
+              </label>
+              <label className="field">
+                <span>Snapshot file</span>
+                <input
+                    type="file"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] || null;
+                      setSnapshotFile(file);
+                      if (file) {
+                        setSnapshotError(null);
+                      }
+                    }}
+                    disabled={snapshotPending}
+                />
+              </label>
+              {snapshotError ? <p className="error">{snapshotError}</p> : null}
+              <div className="row gap-sm wrap">
+                <button type="submit" disabled={snapshotPending}>
+                  {snapshotPending ? "Saving snapshot…" : "Save snapshot"}
+                </button>
+                <button
+                    type="button"
+                    className="button-secondary"
+                    onClick={onResetSnapshotBody}
+                    disabled={snapshotPending}
+                >
+                  Reset file from current document
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <div className="panel stack">
+            <h3>Version history</h3>
+            {bundle.versions.length > 0 ? (
+                <div className="list stack-sm">
+                  {bundle.versions.map((version) => (
+                      <div key={version.id} className="row space-between wrap panel-sm">
+                        <div className="stack-xs">
+                          <button
+                              className="button-link"
+                              onClick={() => setPreviewVersion(version)}
+                          >
+                            <strong>{version.versionName}</strong>
+                          </button>
+                          <p className="muted small">
+                            {formatVersionAuthor(version)} ·{" "}
+                            {new Date(version.created).toLocaleString()}
+                          </p>
+                        </div>
+                        <a
+                            href={getFilePreviewUrlForRecord(version, "file") || getRawFileUrlForRecord(version, "file") || "#"}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                          View File
+                        </a>
+                      </div>
+                  ))}
+                </div>
+            ) : (
+                <p className="muted">No snapshots yet. Create one above.</p>
+            )}
+          </div>
+        </div>
+      </section>
   );
 }
