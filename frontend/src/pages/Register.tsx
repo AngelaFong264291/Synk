@@ -1,10 +1,6 @@
 import { useState, type SubmitEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import {
-  normalizeAuthEmail,
-  pb,
-  pocketBaseErrorMessage,
-} from "../lib/pocketbase";
+import { pb } from "../lib/pocketbase";
 
 export function Register() {
   const navigate = useNavigate();
@@ -23,16 +19,19 @@ export function Register() {
     }
     setPending(true);
     try {
-      const normalizedEmail = normalizeAuthEmail(email);
       await pb.collection("users").create({
-        email: normalizedEmail,
+        email,
         password,
         passwordConfirm,
       });
-      await pb.collection("users").authWithPassword(normalizedEmail, password);
+      await pb.collection("users").authWithPassword(email, password);
       navigate("/dashboard", { replace: true });
     } catch (err: unknown) {
-      setError(pocketBaseErrorMessage(err));
+      const message =
+        err && typeof err === "object" && "message" in err
+          ? String((err as { message: string }).message)
+          : "Could not create account";
+      setError(message);
     } finally {
       setPending(false);
     }

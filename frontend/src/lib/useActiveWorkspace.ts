@@ -32,13 +32,6 @@ function writeStoredWorkspaceId(workspaceId: string | null) {
   );
 }
 
-/** Avoid dispatching during a setState updater — it can trigger setState in other hooks mid-render. */
-function scheduleWriteStoredWorkspaceId(workspaceId: string | null) {
-  queueMicrotask(() => {
-    writeStoredWorkspaceId(workspaceId);
-  });
-}
-
 function pickNextActiveWorkspaceId(
   workspaces: WorkspaceRecord[],
   currentId: string | null,
@@ -49,11 +42,7 @@ function pickNextActiveWorkspaceId(
 }
 
 function dedupeWorkspaces(workspaces: WorkspaceRecord[]) {
-  return [
-    ...new Map(
-      workspaces.map((workspace) => [workspace.id, workspace]),
-    ).values(),
-  ];
+  return [...new Map(workspaces.map((workspace) => [workspace.id, workspace])).values()];
 }
 
 export function useActiveWorkspace() {
@@ -71,9 +60,8 @@ export function useActiveWorkspace() {
     const deduped = dedupeWorkspaces(nextWorkspaces);
     setWorkspaces(deduped);
     setActiveWorkspaceIdState((currentId) => {
-      const candidateId =
-        preferredActiveId ?? pickNextActiveWorkspaceId(deduped, currentId);
-      scheduleWriteStoredWorkspaceId(candidateId);
+      const candidateId = preferredActiveId ?? pickNextActiveWorkspaceId(deduped, currentId);
+      writeStoredWorkspaceId(candidateId);
       return candidateId;
     });
   }
@@ -137,16 +125,15 @@ export function useActiveWorkspace() {
       }
     }
 
-    function onWorkspaceChange(event: Event) {
+    function onWorkspaceChange(
+      event: Event,
+    ) {
       const customEvent = event as CustomEvent<WorkspaceChangeDetail>;
       setActiveWorkspaceIdState(customEvent.detail.workspaceId);
     }
 
     window.addEventListener("storage", onStorage);
-    window.addEventListener(
-      WORKSPACE_CHANGE_EVENT,
-      onWorkspaceChange as EventListener,
-    );
+    window.addEventListener(WORKSPACE_CHANGE_EVENT, onWorkspaceChange as EventListener);
 
     return () => {
       window.removeEventListener("storage", onStorage);
@@ -161,8 +148,8 @@ export function useActiveWorkspace() {
     workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null;
 
   function setActiveWorkspaceId(workspaceId: string) {
+    writeStoredWorkspaceId(workspaceId);
     setActiveWorkspaceIdState(workspaceId);
-    scheduleWriteStoredWorkspaceId(workspaceId);
   }
 
   async function refresh() {

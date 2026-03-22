@@ -11,7 +11,10 @@ import { loadDashboardViewModel } from "../lib/view-models";
 
 export function Dashboard() {
   const { model } = useAuth();
-  const { activeWorkspace, activeWorkspaceId } = useActiveWorkspace();
+  const {
+    activeWorkspace,
+    activeWorkspaceId,
+  } = useActiveWorkspace();
   const [data, setData] = useState<DashboardViewModel | null>(null);
 
   useEffect(() => {
@@ -245,9 +248,7 @@ export function Dashboard() {
             </p>
           </div>
           <div className="document-callout">
-            <strong>
-              {activeWorkspaceId ? "Workspace in sync" : "No workspace yet"}
-            </strong>
+            <strong>{activeWorkspaceId ? "Workspace in sync" : "No workspace yet"}</strong>
             <p>
               {activeWorkspaceId
                 ? "The header selector controls what Documents, Tasks, and Decisions are showing."
@@ -267,9 +268,7 @@ export function Dashboard() {
           </Link>
           <Link className="dashboard-quick-card" to="/decisions">
             <strong>Decisions</strong>
-            <p>
-              Capture product choices so the workspace has a visible record.
-            </p>
+            <p>Capture product choices so the workspace has a visible record.</p>
           </Link>
         </div>
 
@@ -291,7 +290,9 @@ export function Dashboard() {
         <article className="stat-card dashboard-metric-card">
           <span className="dashboard-kpi-label">Task Ownership</span>
           <strong className="stat-value">{openTasks.length}</strong>
-          <p>Open tasks, with {dueTodayTasks.length} due today</p>
+          <p>
+            Open tasks, with {dueTodayTasks.length} due today
+          </p>
         </article>
         <article className="stat-card dashboard-metric-card">
           <span className="dashboard-kpi-label">Decision Log</span>
@@ -301,14 +302,9 @@ export function Dashboard() {
         <article className="stat-card dashboard-metric-card">
           <span className="dashboard-kpi-label">Delivery Progress</span>
           <strong className="stat-value">
-            {tasks.length
-              ? Math.round((completedTasks.length / tasks.length) * 100)
-              : 0}
-            %
+            {tasks.length ? Math.round((completedTasks.length / tasks.length) * 100) : 0}%
           </strong>
-          <p>
-            {completedTasks.length} of {tasks.length} tasks completed
-          </p>
+          <p>{completedTasks.length} of {tasks.length} tasks completed</p>
         </article>
       </div>
 
@@ -334,9 +330,7 @@ export function Dashboard() {
           ) : (
             <div className="document-callout">
               <strong>No activity yet</strong>
-              <p>
-                Create the first workspace record to start the project flow.
-              </p>
+              <p>Create the first workspace record to start the project flow.</p>
             </div>
           )}
         </section>
@@ -350,30 +344,19 @@ export function Dashboard() {
           <div className="feature-checklist">
             <article className="feature-check">
               <strong>1. Choose the active workspace from the header</strong>
-              <p>
-                Everything in Documents, Tasks, and Decisions follows the
-                workspace selected in the top-right chip.
-              </p>
+              <p>Everything in Documents, Tasks, and Decisions follows the workspace selected in the top-right chip.</p>
             </article>
             <article className="feature-check">
               <strong>2. Use Documents for version history</strong>
-              <p>
-                Create records, open a document, and save named snapshots from
-                the detail page.
-              </p>
+              <p>Create records, open a document, and save named snapshots from the detail page.</p>
             </article>
             <article className="feature-check">
               <strong>3. Use Tasks for ownership</strong>
-              <p>
-                Track To Do, In Progress, and Done without mixing workspace
-                setup into the board.
-              </p>
+              <p>Track To Do, In Progress, and Done without mixing workspace setup into the board.</p>
             </article>
             <article className="feature-check">
               <strong>4. Use Workspaces for management only</strong>
-              <p>
-                Create, join, switch, and review members or invite code there.
-              </p>
+              <p>Create, join, switch, and review members or invite code there.</p>
             </article>
           </div>
         </section>

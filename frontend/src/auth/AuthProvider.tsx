@@ -8,7 +8,6 @@ import {
 import type { RecordModel } from "pocketbase";
 import { AuthContext, type AuthContextValue } from "./auth-context";
 import { pb } from "../lib/pocketbase";
-import { collections } from "../lib/types";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState(() => pb.authStore.token);
@@ -21,29 +20,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(pb.authStore.token);
       setModel(pb.authStore.record);
     });
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function validateStoredSession() {
-      if (!pb.authStore.token) {
-        return;
-      }
-      try {
-        await pb.collection(collections.users).authRefresh();
-      } catch {
-        if (!cancelled) {
-          pb.authStore.clear();
-        }
-      }
-    }
-
-    void validateStoredSession();
-
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   const signOut = useCallback(() => {

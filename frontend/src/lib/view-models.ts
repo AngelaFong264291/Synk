@@ -13,7 +13,6 @@ import {
   type Workspace,
 } from "./demo-data";
 import { getDocumentBundle, getWorkspaceDashboardBundle } from "./api";
-import { formatDocumentTimestamp } from "./display";
 import type {
   DecisionRecordWithExpand,
   DocumentRecordWithExpand,
@@ -177,7 +176,7 @@ function mapDocument(
     visibility: document.visibility === "private" ? "Private" : "Workspace",
     linkedTaskCount: linkedTasks.length,
     status: inferDocumentStatus(versions.length),
-    updatedAt: formatDocumentTimestamp(document),
+    updatedAt: formatDateTime(document.updated),
     excerpt: contentPreview || "Plain-text workspace document",
     versions: sortedVersions.map(mapVersion),
   };

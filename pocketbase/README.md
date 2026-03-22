@@ -9,13 +9,10 @@ P0 only:
 - `users`
 - `workspaces`
 - `workspace_members`
-- `workspace_commits`
 - `documents`
 - `document_versions`
 - `tasks`
 - `decisions`
-
-**Migrations vs. manual setup:** Older migration files under `pb_migrations/` created the legacy `teams` demo collections. The app contract below uses `workspaces` and related Synk collections. Migrations `1700000006` and `1700000007` create the Synk schema (including `workspace_commits` and optional `tasks` / `decisions`) when missing. If you already created collections manually, PocketBase merges by name.
 
 Non-goals for this contract:
 
@@ -82,27 +79,6 @@ MVP note:
 - Ship `visibility = workspace` first if private docs slow the team down.
 - If private docs are enabled, use `allowedMembers` for the allow-list.
 
-### `workspace_commits`
-
-Batch snapshots for one or more documents in a workspace (Git-like “commit”).
-
-Fields:
-
-- `workspace` (`relation -> workspaces`, required, max select 1)
-- `message` (`text`, required) — commit message / snapshot label
-- `author` (`relation -> users`, required, max select 1)
-
-Indexes:
-
-- index on `workspace`
-
-REST helpers (custom routes, authenticated members only):
-
-- `POST /api/synk/vc/change` — create commit + linked `document_versions`
-- `GET /api/synk/vc/diff` — `workspaceId`, `fromCommit`, `toCommit`
-- `GET /api/synk/vc/info` — `commitId`
-- `POST /api/synk/vc/revert` — body: `workspaceId`, optional `commitId`
-
 ### `document_versions`
 
 Fields:
@@ -111,13 +87,11 @@ Fields:
 - `versionName` (`text`, required)
 - `content` (`editor`, required)
 - `author` (`relation -> users`, required, max select 1)
-- `commit` (`relation -> workspace_commits`, optional, max select 1) — set when the snapshot was created as part of a workspace commit
 
 Indexes:
 
 - index on `document`
 - index on `author`
-- index on `commit`
 
 ### `tasks`
 
@@ -179,12 +153,6 @@ Recommended rule snippets for the MVP:
 - list/view: `@request.auth.id != "" && workspace.workspace_members_via_workspace.user ?= @request.auth.id && (visibility = "workspace" || owner = @request.auth.id || allowedMembers ?= @request.auth.id)`
 - create: `@request.auth.id != "" && workspace.workspace_members_via_workspace.user ?= @request.auth.id && owner = @request.auth.id`
 - update/delete: `@request.auth.id != "" && workspace.workspace_members_via_workspace.user ?= @request.auth.id && (owner = @request.auth.id || workspace.owner = @request.auth.id)`
-
-### `workspace_commits`
-
-- list/view: `@request.auth.id != "" && workspace.workspace_members_via_workspace.user ?= @request.auth.id`
-- create: `@request.auth.id != "" && workspace.workspace_members_via_workspace.user ?= @request.auth.id && author = @request.auth.id`
-- update/delete: `@request.auth.id != "" && workspace.workspace_members_via_workspace.user ?= @request.auth.id`
 
 ### `document_versions`
 

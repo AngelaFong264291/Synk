@@ -1,15 +1,7 @@
-import { useState, type SubmitEvent } from "react";
-import {
-  Link,
-  useLocation,
-  useNavigate,
-  type Location,
-} from "react-router-dom";
-import {
-  normalizeAuthEmail,
-  pb,
-  pocketBaseErrorMessage,
-} from "../lib/pocketbase";
+import { useEffect, useState, type FormEvent } from "react";
+import { Link, useLocation, useNavigate, type Location } from "react-router-dom";
+import { pb } from "../lib/pocketbase";
+import { useAuth } from "../auth/useAuth";
 
 export function Login() {
   const navigate = useNavigate();
@@ -34,12 +26,14 @@ export function Login() {
     setError(null);
     setPending(true);
     try {
-      await pb
-        .collection("users")
-        .authWithPassword(normalizeAuthEmail(email), password);
+      await pb.collection("users").authWithPassword(email, password);
       navigate(from, { replace: true });
     } catch (err: unknown) {
-      setError(pocketBaseErrorMessage(err));
+      const message =
+        err && typeof err === "object" && "message" in err
+          ? String((err as { message: string }).message)
+          : "Sign in failed";
+      setError(message);
     } finally {
       setPending(false);
     }

@@ -1,5 +1,4 @@
-import { ClientResponseError } from "pocketbase";
-import { normalizeAuthEmail, pb, pocketBaseErrorMessage } from "./pocketbase";
+import { pb } from "./pocketbase";
 import { collections } from "./types";
 import type {
   DashboardSnapshot,
@@ -13,25 +12,10 @@ import type {
   TaskRecordWithExpand,
   TaskStatus,
   UserRecord,
-  WorkspaceCommitRecordWithExpand,
   WorkspaceMemberWithExpand,
   WorkspaceRecord,
   WorkspaceRole,
 } from "./types";
-
-/** Include `fields` so `expand` does not trim base system fields (`created`, `updated`). */
-const DOCUMENT_WITH_OWNER_EXPAND = {
-  expand: "owner",
-  fields: "*",
-};
-
-const DOCUMENT_VERSION_WITH_AUTHOR_EXPAND = {
-  expand: "author",
-  fields: "*",
-};
-
-/** PocketBase caps list `perPage` at 500; the JS SDK `getFullList` default `batch` is 1000. */
-const FULL_LIST_BATCH = 500;
 
 type SignUpInput = {
   email: string;
@@ -89,135 +73,6 @@ type CreateDecisionInput = {
   decidedAt?: string;
 };
 
-export type VcChangeDocumentInput = {
-  documentId: string;
-  content: string;
-  versionName?: string;
-};
-
-export type VcChangeInput = {
-  workspaceId: string;
-  message: string;
-  documents: VcChangeDocumentInput[];
-};
-
-export type VcChangeResponse = {
-  commit: { id: string };
-  versions: Array<{
-    id: string;
-    document: string;
-    versionName: string;
-    content: string;
-    author: string;
-    commit: string;
-    created: string;
-  }>;
-};
-
-export type VcDiffDocument = {
-  documentId: string;
-  title: string;
-  before: string;
-  after: string;
-};
-
-export type VcDiffResponse = {
-  workspaceId: string;
-  fromCommit: string;
-  toCommit: string;
-  documents: VcDiffDocument[];
-};
-
-export type VcInfoChange = {
-  documentId: string;
-  title: string;
-  versionId: string;
-};
-
-export type VcInfoResponse = {
-  id: string;
-  workspaceId: string;
-  message: string;
-  author: string;
-  created: string;
-  hash: string;
-  changes: VcInfoChange[];
-};
-
-export type VcRevertResponse = {
-  commit: { id: string };
-  versions: Array<{
-    id: string;
-    document: string;
-    versionName: string;
-    commit: string;
-  }>;
-};
-
-async function vcRequest<T>(path: string, init: RequestInit): Promise<T> {
-  const base = pb.baseURL.replace(/\/$/, "");
-  const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-    ...(init.headers ?? {}),
-  };
-  const token = pb.authStore.token;
-  if (token) {
-    (headers as Record<string, string>).Authorization = token;
-  }
-  const res = await fetch(url, { ...init, headers });
-  const data = (await res.json().catch(() => ({}))) as { message?: string };
-  if (!res.ok) {
-    throw new Error(data.message ?? res.statusText);
-  }
-  return data as T;
-}
-
-export async function vcChange(
-  input: VcChangeInput,
-): Promise<VcChangeResponse> {
-  requireCurrentUser();
-  return vcRequest<VcChangeResponse>("/api/synk/vc/change", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
-}
-
-export async function vcDiff(
-  workspaceId: string,
-  fromCommit: string,
-  toCommit: string,
-): Promise<VcDiffResponse> {
-  requireCurrentUser();
-  const params = new URLSearchParams({
-    workspaceId,
-    fromCommit,
-    toCommit,
-  });
-  return vcRequest<VcDiffResponse>(`/api/synk/vc/diff?${params.toString()}`, {
-    method: "GET",
-  });
-}
-
-export async function vcInfo(commitId: string): Promise<VcInfoResponse> {
-  requireCurrentUser();
-  const params = new URLSearchParams({ commitId });
-  return vcRequest<VcInfoResponse>(`/api/synk/vc/info?${params.toString()}`, {
-    method: "GET",
-  });
-}
-
-export async function vcRevert(
-  workspaceId: string,
-  commitId?: string,
-): Promise<VcRevertResponse> {
-  requireCurrentUser();
-  return vcRequest<VcRevertResponse>("/api/synk/vc/revert", {
-    method: "POST",
-    body: JSON.stringify({ workspaceId, commitId }),
-  });
-}
-
 function requireCurrentUser(): UserRecord {
   const record = pb.authStore.record;
 
@@ -232,66 +87,8 @@ function normalizeInviteCode(code: string) {
   return code.trim().toUpperCase();
 }
 
-function generateInviteCode(): string {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  const bytes = new Uint8Array(8);
-  crypto.getRandomValues(bytes);
-  let out = "";
-  for (let i = 0; i < 8; i++) {
-    out += alphabet[bytes[i]! % alphabet.length];
-  }
-  return out;
-}
-
-function resolveInviteCodeForCreate(inviteCode: string) {
-  const normalized = normalizeInviteCode(inviteCode);
-  if (normalized.length > 0) {
-    return normalized;
-  }
-  return generateInviteCode();
-}
-
-function mapTeamsCreateError(error: unknown): Error {
-  if (error instanceof ClientResponseError && error.response?.data) {
-    const data = error.response.data as Record<string, unknown>;
-    for (const key of ["code", "inviteCode"] as const) {
-      const field = data[key];
-      if (
-        field &&
-        typeof field === "object" &&
-        "message" in field &&
-        typeof (field as { message: string }).message === "string"
-      ) {
-        const m = (field as { message: string }).message.toLowerCase();
-        if (m.includes("unique") || m.includes("duplicate")) {
-          return new Error(
-            "That invite code is already in use. Choose a different code.",
-          );
-        }
-      }
-    }
-  }
-  if (error instanceof ClientResponseError && error.status === 400) {
-    const msg = pocketBaseErrorMessage(error).toLowerCase();
-    if (
-      msg.includes("unique") ||
-      msg.includes("idx_teams_code") ||
-      msg.includes("duplicate")
-    ) {
-      return new Error(
-        "That invite code is already in use. Choose a different code.",
-      );
-    }
-  }
-  return new Error(pocketBaseErrorMessage(error));
-}
-
 function dedupeWorkspaces(workspaces: WorkspaceRecord[]) {
-  return [
-    ...new Map(
-      workspaces.map((workspace) => [workspace.id, workspace]),
-    ).values(),
-  ];
+  return [...new Map(workspaces.map((workspace) => [workspace.id, workspace])).values()];
 }
 
 function isMissingCollectionError(error: unknown) {
@@ -308,50 +105,16 @@ function isMissingCollectionError(error: unknown) {
   );
 }
 
-/**
- * Local PocketBase DBs can leave a `workspaces` row in `_collections` that
- * rejects every list request with 400 (broken schema/rules). Teams is the
- * real backend after migration `use_teams_as_backend`; treat this like absent.
- */
-function isUnusableLegacyWorkspacesTableError(error: unknown) {
-  return error instanceof ClientResponseError && error.status === 400;
-}
-
-function isRecordNotFoundError(error: unknown) {
-  return error instanceof ClientResponseError && error.status === 404;
-}
-
 async function getWorkspaceByInviteCode(inviteCode: string) {
   const normalizedCode = normalizeInviteCode(inviteCode);
 
-  try {
-    return await pb
-      .collection(collections.teams)
-      .getFirstListItem<WorkspaceRecord>(
-        pb.filter("code = {:inviteCode}", {
-          inviteCode: normalizedCode,
-        }),
-      );
-  } catch (error: unknown) {
-    if (!isMissingCollectionError(error)) {
-      throw error;
-    }
-
-    try {
-      return await pb
-        .collection(collections.workspaces)
-        .getFirstListItem<WorkspaceRecord>(
-          pb.filter("inviteCode = {:inviteCode}", {
-            inviteCode: normalizedCode,
-          }),
-        );
-    } catch (fallbackError: unknown) {
-      if (isUnusableLegacyWorkspacesTableError(fallbackError)) {
-        throw error;
-      }
-      throw fallbackError;
-    }
-  }
+  return pb
+    .collection(collections.workspaces)
+    .getFirstListItem<WorkspaceRecord>(
+      pb.filter("inviteCode = {:inviteCode}", {
+        inviteCode: normalizedCode,
+      }),
+    );
 }
 
 async function recoverWorkspaceAfterCreateFailure(
@@ -371,6 +134,19 @@ async function recoverWorkspaceAfterCreateFailure(
   return null;
 }
 
+async function getOwnedTeam(workspaceId: string, userId: string) {
+  try {
+    const team = await pb.collection(collections.teams).getOne<WorkspaceRecord>(workspaceId);
+    return team.owner === userId ? team : null;
+  } catch (error: unknown) {
+    if (!isMissingCollectionError(error)) {
+      throw error;
+    }
+
+    return null;
+  }
+}
+
 async function getOwnedWorkspace(workspaceId: string, userId: string) {
   try {
     const workspace = await pb
@@ -378,10 +154,7 @@ async function getOwnedWorkspace(workspaceId: string, userId: string) {
       .getOne<WorkspaceRecord>(workspaceId);
     return workspace.owner === userId ? workspace : null;
   } catch (error: unknown) {
-    if (
-      !isMissingCollectionError(error) &&
-      !isUnusableLegacyWorkspacesTableError(error)
-    ) {
+    if (!isMissingCollectionError(error)) {
       throw error;
     }
 
@@ -414,46 +187,19 @@ function createOwnerMembership(
 }
 
 function getMembershipWorkspace(membership: WorkspaceMemberWithExpand) {
-  return membership.expand?.workspace ?? membership.expand?.team ?? null;
+  return membership.expand?.workspace ?? null;
 }
 
 async function getWorkspaceMembership(workspaceId: string, userId?: string) {
   const currentUser = userId ? null : requireCurrentUser();
   const currentUserId = userId ?? currentUser!.id;
+  const ownedWorkspace = await getOwnedWorkspace(workspaceId, currentUserId);
 
-  /**
-   * After `use_teams_as_backend`, active workspace ids are `teams` row ids.
-   * Never call legacy `workspaces.getOne` with a team id: that collection may
-   * still exist but have broken rules (e.g. missing `workspace_members` back-relation).
-   */
-  let team: WorkspaceRecord | null = null;
-  try {
-    team = await pb
-      .collection(collections.teams)
-      .getOne<WorkspaceRecord>(workspaceId);
-  } catch (error: unknown) {
-    if (isMissingCollectionError(error) || isRecordNotFoundError(error)) {
-      team = null;
-    } else {
-      throw error;
-    }
-  }
-
-  if (team) {
-    if (team.owner === currentUserId) {
-      return createOwnerMembership(
-        team,
-        currentUser ?? (await getUserById(currentUserId)),
-      );
-    }
-  } else {
-    const ownedWorkspace = await getOwnedWorkspace(workspaceId, currentUserId);
-    if (ownedWorkspace && ownedWorkspace.owner === currentUserId) {
-      return createOwnerMembership(
-        ownedWorkspace,
-        currentUser ?? (await getUserById(currentUserId)),
-      );
-    }
+  if (ownedWorkspace && ownedWorkspace.owner === currentUserId) {
+    return createOwnerMembership(
+      ownedWorkspace,
+      currentUser ?? (await getUserById(currentUserId)),
+    );
   }
 
   return pb
@@ -471,7 +217,7 @@ async function getWorkspaceMembership(workspaceId: string, userId?: string) {
 
 export async function signUp(input: SignUpInput) {
   return pb.collection(collections.users).create<UserRecord>({
-    email: normalizeAuthEmail(input.email),
+    email: input.email,
     password: input.password,
     passwordConfirm: input.passwordConfirm,
     name: input.name,
@@ -481,7 +227,7 @@ export async function signUp(input: SignUpInput) {
 export async function signIn(email: string, password: string) {
   return pb
     .collection(collections.users)
-    .authWithPassword<UserRecord>(normalizeAuthEmail(email), password);
+    .authWithPassword<UserRecord>(email, password);
 }
 
 export function signOut() {
@@ -499,13 +245,12 @@ export async function getDefaultWorkspace() {
 
 export async function listMyWorkspaces() {
   const user = requireCurrentUser();
-  let ownedTeams: WorkspaceRecord[] = [];
+  let ownedWorkspaces: WorkspaceRecord[] = [];
 
   try {
-    ownedTeams = await pb
-      .collection(collections.teams)
+    ownedWorkspaces = await pb
+      .collection(collections.workspaces)
       .getFullList<WorkspaceRecord>({
-        batch: FULL_LIST_BATCH,
         filter: pb.filter("owner = {:user}", { user: user.id }),
         sort: "name",
       });
@@ -515,17 +260,12 @@ export async function listMyWorkspaces() {
     }
   }
 
-  // Do not list legacy `workspaces` here: after `use_teams_as_backend` the table
-  // may be gone or a broken stub (400 on every list), which still logs in the
-  // console before we can catch. Discovery is via `teams` + memberships below.
-
   let memberships: WorkspaceMemberWithExpand[];
 
   try {
     memberships = await pb
       .collection(collections.workspaceMembers)
       .getFullList<WorkspaceMemberWithExpand>({
-        batch: FULL_LIST_BATCH,
         filter: pb.filter("user = {:user}", { user: user.id }),
         sort: "id",
         expand: "workspace,user",
@@ -534,43 +274,25 @@ export async function listMyWorkspaces() {
     if (!isMissingCollectionError(error)) {
       throw error;
     }
-
-    memberships = await pb
-      .collection(collections.workspaceMembers)
-      .getFullList<WorkspaceMemberWithExpand>({
-        batch: FULL_LIST_BATCH,
-        filter: pb.filter("user = {:user}", { user: user.id }),
-        sort: "id",
-        expand: "workspace,user",
-      });
+    memberships = [];
   }
 
   const memberWorkspaces = memberships
     .map((membership) => getMembershipWorkspace(membership))
     .filter((workspace): workspace is WorkspaceRecord => Boolean(workspace));
 
-  const merged = dedupeWorkspaces([...ownedTeams, ...memberWorkspaces]);
-  merged.sort((a, b) =>
-    (a.name ?? "").localeCompare(b.name ?? "", undefined, {
-      sensitivity: "base",
-    }),
-  );
-  return merged;
+  return dedupeWorkspaces([...ownedWorkspaces, ...memberWorkspaces]);
 }
 
 export async function createWorkspace(input: CreateWorkspaceInput) {
   const user = requireCurrentUser();
-  const trimmedName = input.name.trim();
-  if (!trimmedName) {
-    throw new Error("Workspace name is required.");
-  }
-  const normalizedCode = resolveInviteCodeForCreate(input.inviteCode);
+  const normalizedCode = normalizeInviteCode(input.inviteCode);
 
   try {
     const workspace = await pb
       .collection(collections.teams)
       .create<WorkspaceRecord>({
-        name: trimmedName,
+        name: input.name,
         owner: user.id,
         code: normalizedCode,
       });
@@ -585,7 +307,6 @@ export async function createWorkspace(input: CreateWorkspaceInput) {
     const recovered = await recoverWorkspaceAfterCreateFailure(
       {
         ...input,
-        name: trimmedName,
         inviteCode: normalizedCode,
       },
       user.id,
@@ -596,7 +317,7 @@ export async function createWorkspace(input: CreateWorkspaceInput) {
     }
 
     if (!isMissingCollectionError(error)) {
-      throw mapTeamsCreateError(error);
+      throw error;
     }
   }
 
@@ -606,7 +327,7 @@ export async function createWorkspace(input: CreateWorkspaceInput) {
     workspace = await pb
       .collection(collections.workspaces)
       .create<WorkspaceRecord>({
-        name: trimmedName,
+        name: input.name,
         description: input.description,
         owner: user.id,
         inviteCode: normalizedCode,
@@ -615,7 +336,6 @@ export async function createWorkspace(input: CreateWorkspaceInput) {
     const recovered = await recoverWorkspaceAfterCreateFailure(
       {
         ...input,
-        name: trimmedName,
         inviteCode: normalizedCode,
       },
       user.id,
@@ -625,7 +345,7 @@ export async function createWorkspace(input: CreateWorkspaceInput) {
       return recovered;
     }
 
-    throw mapTeamsCreateError(error);
+    throw error;
   }
 
   try {
@@ -666,143 +386,59 @@ export async function ensureWorkspaceMembership(
 
 export async function listWorkspaceMembers(workspaceId: string) {
   const currentUser = requireCurrentUser();
-  const accessMembership = await getWorkspaceMembership(
-    workspaceId,
-    currentUser.id,
-  );
+  const accessMembership = await getWorkspaceMembership(workspaceId, currentUser.id);
 
-  try {
-    const members = await pb
-      .collection(collections.teamMembers)
-      .getFullList<WorkspaceMemberWithExpand>({
-        batch: FULL_LIST_BATCH,
-        filter: pb.filter("team = {:workspace}", {
-          workspace: workspaceId,
-        }),
-        sort: "id",
-        expand: "user,team",
-      });
+  const members = await pb
+    .collection(collections.workspaceMembers)
+    .getFullList<WorkspaceMemberWithExpand>({
+      filter: pb.filter("workspace = {:workspace}", {
+        workspace: workspaceId,
+      }),
+      sort: "id",
+      expand: "user,workspace",
+    });
 
-    const ownerMembership =
-      accessMembership.role === "owner" &&
-      !members.some((member) => member.user === currentUser.id)
-        ? [
-            createOwnerMembership(
-              getMembershipWorkspace(accessMembership) ??
-                (await getWorkspace(workspaceId)),
-              currentUser,
-            ),
-          ]
-        : [];
+  const ownerMembership =
+    accessMembership.role === "owner" &&
+    !members.some((member) => member.user === currentUser.id)
+      ? [
+          createOwnerMembership(
+            getMembershipWorkspace(accessMembership) ?? (await getWorkspace(workspaceId)),
+            currentUser,
+          ),
+        ]
+      : [];
 
-    return [...ownerMembership, ...members];
-  } catch (error: unknown) {
-    if (!isMissingCollectionError(error)) {
-      throw error;
-    }
-
-    const members = await pb
-      .collection(collections.workspaceMembers)
-      .getFullList<WorkspaceMemberWithExpand>({
-        batch: FULL_LIST_BATCH,
-        filter: pb.filter("workspace = {:workspace}", {
-          workspace: workspaceId,
-        }),
-        sort: "id",
-        expand: "user,workspace",
-      });
-
-    const ownerMembership =
-      accessMembership.role === "owner" &&
-      !members.some((member) => member.user === currentUser.id)
-        ? [
-            createOwnerMembership(
-              getMembershipWorkspace(accessMembership) ??
-                (await getWorkspace(workspaceId)),
-              currentUser,
-            ),
-          ]
-        : [];
-
-    return [...ownerMembership, ...members];
-  }
+  return [...ownerMembership, ...members];
 }
 
 export async function getWorkspace(workspaceId: string) {
   await getWorkspaceMembership(workspaceId);
 
-  try {
-    return await pb
-      .collection(collections.teams)
-      .getOne<WorkspaceRecord>(workspaceId);
-  } catch (error: unknown) {
-    if (!isMissingCollectionError(error)) {
-      throw error;
-    }
-
-    try {
-      return await pb
-        .collection(collections.workspaces)
-        .getOne<WorkspaceRecord>(workspaceId);
-    } catch (fallbackError: unknown) {
-      if (isUnusableLegacyWorkspacesTableError(fallbackError)) {
-        throw error;
-      }
-      throw fallbackError;
-    }
-  }
+  return pb
+    .collection(collections.workspaces)
+    .getOne<WorkspaceRecord>(workspaceId);
 }
 
 export async function listWorkspaceDocuments(workspaceId: string) {
   await getWorkspaceMembership(workspaceId);
 
-  const docs = await pb
-    .collection(collections.documents)
-    .getFullList<DocumentRecord>({
-      batch: FULL_LIST_BATCH,
-      filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
-      sort: "title",
-      fields: "*",
-    });
-
-  docs.sort((a, b) => {
-    const bu = b.updated || b.created || "";
-    const au = a.updated || a.created || "";
-    return bu.localeCompare(au);
+  return pb.collection(collections.documents).getFullList<DocumentRecord>({
+    filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
+    sort: "title",
   });
-
-  return docs;
 }
 
 export async function listWorkspaceDocumentsWithExpand(workspaceId: string) {
   await getWorkspaceMembership(workspaceId);
 
-  const docs = await pb
+  return pb
     .collection(collections.documents)
     .getFullList<DocumentRecordWithExpand>({
-      batch: FULL_LIST_BATCH,
       filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
       sort: "title",
-      ...DOCUMENT_WITH_OWNER_EXPAND,
+      expand: "owner",
     });
-
-  docs.sort((a, b) => {
-    const bu = b.updated || b.created || "";
-    const au = a.updated || a.created || "";
-    return bu.localeCompare(au);
-  });
-
-  return docs;
-}
-
-export async function getDocumentWithExpand(documentId: string) {
-  const document = await pb
-    .collection(collections.documents)
-    .getOne<DocumentRecordWithExpand>(documentId, DOCUMENT_WITH_OWNER_EXPAND);
-
-  await getWorkspaceMembership(document.workspace);
-
-  return document;
 }
 
 export async function createDocument(input: CreateDocumentInput) {
@@ -810,20 +446,23 @@ export async function createDocument(input: CreateDocumentInput) {
   // Ensure the workspace exists and the user has access.
   await getWorkspaceMembership(input.workspaceId);
 
-  const created = await pb
-    .collection(collections.documents)
-    .create<DocumentRecord>({
-      workspace: input.workspaceId,
-      title: input.title,
-      currentContent: input.currentContent ?? "",
-      owner: user.id,
-      visibility: input.visibility ?? "workspace",
-      allowedMembers: input.allowedMembers ?? [],
-    });
+  const formData = new FormData();
+  formData.append("workspace", input.workspaceId);
+  formData.append("title", input.title);
+  formData.append("owner", user.id);
+  formData.append("visibility", input.visibility ?? "workspace");
 
-  return pb
-    .collection(collections.documents)
-    .getOne<DocumentRecordWithExpand>(created.id, DOCUMENT_WITH_OWNER_EXPAND);
+  if (input.file) {
+    formData.append("file", input.file);
+  }
+
+  if (input.allowedMembers) {
+    input.allowedMembers.forEach((memberId) => {
+      formData.append("allowedMembers", memberId);
+    });
+  }
+
+  return pb.collection(collections.documents).create<DocumentRecord>(formData);
 }
 
 export async function updateDocument(
@@ -836,13 +475,20 @@ export async function updateDocument(
 
   await getWorkspaceMembership(current.workspace);
 
-  await pb
-    .collection(collections.documents)
-    .update<DocumentRecord>(documentId, input);
+  const formData = new FormData();
+  if (input.title !== undefined) formData.append("title", input.title);
+  if (input.file !== undefined) formData.append("file", input.file);
+  if (input.visibility !== undefined)
+    formData.append("visibility", input.visibility);
+  if (input.allowedMembers !== undefined) {
+    input.allowedMembers.forEach((memberId) => {
+      formData.append("allowedMembers", memberId);
+    });
+  }
 
   return pb
     .collection(collections.documents)
-    .getOne<DocumentRecordWithExpand>(documentId, DOCUMENT_WITH_OWNER_EXPAND);
+    .update<DocumentRecord>(documentId, formData);
 }
 
 export async function listDocumentVersions(documentId: string) {
@@ -852,16 +498,12 @@ export async function listDocumentVersions(documentId: string) {
 
   await getWorkspaceMembership(document.workspace);
 
-  const versions = await pb
+  return pb
     .collection(collections.documentVersions)
     .getFullList<DocumentVersionRecord>({
-      batch: FULL_LIST_BATCH,
       filter: pb.filter("document = {:document}", { document: documentId }),
+      sort: "-created",
     });
-
-  versions.sort((a, b) => b.created.localeCompare(a.created));
-
-  return versions;
 }
 
 export async function listDocumentVersionsWithExpand(documentId: string) {
@@ -871,73 +513,54 @@ export async function listDocumentVersionsWithExpand(documentId: string) {
 
   await getWorkspaceMembership(document.workspace);
 
-  const versions = await pb
+  return pb
     .collection(collections.documentVersions)
     .getFullList<DocumentVersionRecordWithExpand>({
-      batch: FULL_LIST_BATCH,
       filter: pb.filter("document = {:document}", { document: documentId }),
-      ...DOCUMENT_VERSION_WITH_AUTHOR_EXPAND,
+      sort: "-created",
+      expand: "author",
     });
-
-  versions.sort((a, b) => b.created.localeCompare(a.created));
-
-  return versions;
 }
 
 export async function createDocumentVersion(input: CreateVersionInput) {
-  requireCurrentUser();
+  const user = requireCurrentUser();
   const document = await pb
     .collection(collections.documents)
     .getOne<DocumentRecord>(input.documentId);
 
   await getWorkspaceMembership(document.workspace);
 
-  const { versions } = await vcChange({
-    workspaceId: document.workspace,
-    message: input.versionName,
-    documents: [
-      {
-        documentId: document.id,
-        content: input.content,
-        versionName: input.versionName,
-      },
-    ],
-  });
-
-  const created = versions[0];
-  if (!created) {
-    throw new Error("Version control API returned no versions");
-  }
-
-  return pb
+  const createdVersion = await pb
     .collection(collections.documentVersions)
-    .getOne<DocumentVersionRecordWithExpand>(
-      created.id,
-      DOCUMENT_VERSION_WITH_AUTHOR_EXPAND,
-    );
-}
-
-export async function listWorkspaceCommits(workspaceId: string) {
-  await getWorkspaceMembership(workspaceId);
-
-  const commits = await pb
-    .collection(collections.workspaceCommits)
-    .getFullList<WorkspaceCommitRecordWithExpand>({
-      batch: FULL_LIST_BATCH,
-      filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
-      expand: "author",
+    .create<DocumentVersionRecord>({
+      document: document.id,
+      versionName: input.versionName,
+      content: input.content,
+      author: user.id,
     });
 
-  commits.sort((a, b) => b.created.localeCompare(a.created));
+  try {
+    await updateDocument(document.id, { title: document.title });
+    // Note: currentContent field was removed from CreateDocumentInput/UpdateDocumentInput
+    return createdVersion;
+  } catch (error: unknown) {
+    try {
+      await pb
+        .collection(collections.documentVersions)
+        .delete(createdVersion.id);
+    await updateDocument(document.id, { title: document.title });
+    } catch {
+      // Best-effort rollback only; preserve the original error below.
+    }
 
-  return commits;
+    throw error;
+  }
 }
 
 export async function listWorkspaceTasks(workspaceId: string) {
   await getWorkspaceMembership(workspaceId);
 
   return pb.collection(collections.tasks).getFullList<TaskRecord>({
-    batch: FULL_LIST_BATCH,
     filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
     sort: "status,dueDate",
   });
@@ -947,7 +570,6 @@ export async function listWorkspaceTasksWithExpand(workspaceId: string) {
   await getWorkspaceMembership(workspaceId);
 
   return pb.collection(collections.tasks).getFullList<TaskRecordWithExpand>({
-    batch: FULL_LIST_BATCH,
     filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
     sort: "status,dueDate",
     expand: "assignee,document",
@@ -985,7 +607,6 @@ export async function listWorkspaceDecisions(workspaceId: string) {
   await getWorkspaceMembership(workspaceId);
 
   return pb.collection(collections.decisions).getFullList<DecisionRecord>({
-    batch: FULL_LIST_BATCH,
     filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
     sort: "-decidedAt",
   });
@@ -997,7 +618,6 @@ export async function listWorkspaceDecisionsWithExpand(workspaceId: string) {
   return pb
     .collection(collections.decisions)
     .getFullList<DecisionRecordWithExpand>({
-      batch: FULL_LIST_BATCH,
       filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
       sort: "-decidedAt",
       expand: "owner,linkedTask,linkedDocument",
@@ -1057,14 +677,15 @@ export async function getDashboardSnapshot(
 export async function getDocumentBundle(documentId: string) {
   const document = await pb
     .collection(collections.documents)
-    .getOne<DocumentRecordWithExpand>(documentId, DOCUMENT_WITH_OWNER_EXPAND);
+    .getOne<DocumentRecordWithExpand>(documentId, {
+      expand: "owner",
+    });
 
   await getWorkspaceMembership(document.workspace);
 
   const [versions, linkedTasks] = await Promise.all([
     listDocumentVersionsWithExpand(documentId),
     pb.collection(collections.tasks).getFullList<TaskRecordWithExpand>({
-      batch: FULL_LIST_BATCH,
       filter: pb.filter("document = {:document}", { document: documentId }),
       sort: "dueDate",
       expand: "assignee,document",
