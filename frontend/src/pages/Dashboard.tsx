@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type SubmitEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { pb } from "../lib/pocketbase";
@@ -13,6 +13,15 @@ export function Dashboard() {
   const { model } = useAuth();
   const { activeWorkspaceId } = useActiveWorkspace();
   const [data, setData] = useState<DashboardViewModel | null>(null);
+  const [inviteCode, setInviteCode] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [joinStatus, setJoinStatus] = useState("");
+  const [inviteStatus, setInviteStatus] = useState("");
+  const [isJoining, setIsJoining] = useState(false);
+  const [isInviting, setIsInviting] = useState(false);
+  const [teamName, setTeamName] = useState("");
+  const [isCreatingTeam, setIsCreatingTeam] = useState(false);
+  const [createTeamStatus, setCreateTeamStatus] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -46,17 +55,8 @@ export function Dashboard() {
 
   const { decisions, documents, members, tasks, workspace, source } = data;
   const openTasks = tasks.filter((task) => task.status !== "Done");
-  const [inviteCode, setInviteCode] = useState("");
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [joinStatus, setJoinStatus] = useState("");
-  const [inviteStatus, setInviteStatus] = useState("");
-  const [isJoining, setIsJoining] = useState(false);
-  const [isInviting, setIsInviting] = useState(false);
-  const [teamName, setTeamName] = useState("");
-  const [isCreatingTeam, setIsCreatingTeam] = useState(false);
-  const [createTeamStatus, setCreateTeamStatus] = useState("");
 
-  async function handleCreateTeam(e: FormEvent) {
+  async function handleCreateTeam(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     setIsCreatingTeam(true);
     setCreateTeamStatus("");
@@ -67,15 +67,17 @@ export function Dashboard() {
       // generate a simple random code
       const code = Math.random().toString(36).substring(2, 10).toUpperCase();
 
-      await pb.collection('teams').create({
+      await pb.collection("teams").create({
         name: teamName,
         code: code,
-        owner: model.id
+        owner: model.id,
       });
 
-      setCreateTeamStatus(`Successfully created team: ${teamName} (Code: ${code})`);
+      setCreateTeamStatus(
+        `Successfully created team: ${teamName} (Code: ${code})`,
+      );
       setTeamName("");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       setCreateTeamStatus("Failed to create team. Please try again.");
     } finally {
@@ -83,7 +85,7 @@ export function Dashboard() {
     }
   }
 
-  async function handleJoinTeam(e: FormEvent) {
+  async function handleJoinTeam(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     setIsJoining(true);
     setJoinStatus("");
@@ -91,8 +93,8 @@ export function Dashboard() {
     try {
       if (!model?.id) throw new Error("Not logged in");
 
-      const teams = await pb.collection('teams').getList(1, 1, {
-        filter: `code = "${inviteCode}"`
+      const teams = await pb.collection("teams").getList(1, 1, {
+        filter: `code = "${inviteCode}"`,
       });
 
       if (teams.items.length === 0) {
@@ -102,9 +104,11 @@ export function Dashboard() {
       const team = teams.items[0];
 
       // Check if user is already in the team
-      const existingMembers = await pb.collection('team_members').getList(1, 1, {
-        filter: `team = "${team.id}" && user = "${model.id}"`
-      });
+      const existingMembers = await pb
+        .collection("team_members")
+        .getList(1, 1, {
+          filter: `team = "${team.id}" && user = "${model.id}"`,
+        });
 
       if (existingMembers.items.length > 0) {
         setJoinStatus(`You are already a member of team: ${team.name}`);
@@ -112,22 +116,26 @@ export function Dashboard() {
         return;
       }
 
-      await pb.collection('team_members').create({
+      await pb.collection("team_members").create({
         user: model.id,
-        team: team.id
+        team: team.id,
       });
 
       setJoinStatus(`Successfully joined team: ${team.name}`);
       setInviteCode("");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setJoinStatus(err.message || "Failed to join team. Please check the code and try again.");
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Failed to join team. Please check the code and try again.";
+      setJoinStatus(message);
     } finally {
       setIsJoining(false);
     }
   }
 
-  async function handleSendInvite(e: FormEvent) {
+  async function handleSendInvite(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     setIsInviting(true);
     setInviteStatus("");
@@ -137,8 +145,8 @@ export function Dashboard() {
 
       // Assuming the user is part of a team, let's just get their first team for now
       // A more robust implementation would let them select which team to invite to
-      const myTeams = await pb.collection('team_members').getList(1, 1, {
-        filter: `user = "${model.id}"`
+      const myTeams = await pb.collection("team_members").getList(1, 1, {
+        filter: `user = "${model.id}"`,
       });
 
       if (myTeams.items.length === 0) {
@@ -147,17 +155,21 @@ export function Dashboard() {
 
       const teamId = myTeams.items[0].team;
 
-      await pb.collection('team_invites').create({
+      await pb.collection("team_invites").create({
         email: inviteEmail,
         inviter: model.id,
-        team: teamId
+        team: teamId,
       });
 
       setInviteStatus(`An invite has been sent to ${inviteEmail}`);
       setInviteEmail("");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setInviteStatus(err.message || "Failed to send invite. Please try again.");
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Failed to send invite. Please try again.";
+      setInviteStatus(message);
     } finally {
       setIsInviting(false);
     }
@@ -190,9 +202,7 @@ export function Dashboard() {
 
       {source === "demo" ? (
         <div className="panel">
-          <p className="muted">
-            Showing demo fallback data.
-          </p>
+          <p className="muted">Showing demo fallback data.</p>
           <p className="muted">
             {data.error
               ? `Live PocketBase data failed to load: ${data.error}`
@@ -322,7 +332,8 @@ export function Dashboard() {
       <section className="stack">
         <h1>Teams</h1>
         <p>
-          Manage your teams below. Signed in as <strong>{model?.email ?? model?.id}</strong>
+          Manage your teams below. Signed in as{" "}
+          <strong>{model?.email ?? model?.id}</strong>
         </p>
 
         <div className="two-column">
@@ -343,7 +354,11 @@ export function Dashboard() {
                 {isCreatingTeam ? "Creating..." : "Create Team"}
               </button>
               {createTeamStatus && (
-                <p className={createTeamStatus.startsWith("Failed") ? "error" : "muted"}>
+                <p
+                  className={
+                    createTeamStatus.startsWith("Failed") ? "error" : "muted"
+                  }
+                >
                   {createTeamStatus}
                 </p>
               )}
@@ -367,7 +382,11 @@ export function Dashboard() {
                 {isJoining ? "Joining..." : "Join Team"}
               </button>
               {joinStatus && (
-                <p className={joinStatus.startsWith("Failed") ? "error" : "muted"}>
+                <p
+                  className={
+                    joinStatus.startsWith("Failed") ? "error" : "muted"
+                  }
+                >
                   {joinStatus}
                 </p>
               )}
@@ -392,7 +411,11 @@ export function Dashboard() {
               {isInviting ? "Sending..." : "Send Invite"}
             </button>
             {inviteStatus && (
-              <p className={inviteStatus.startsWith("Failed") ? "error" : "muted"}>
+              <p
+                className={
+                  inviteStatus.startsWith("Failed") ? "error" : "muted"
+                }
+              >
                 {inviteStatus}
               </p>
             )}

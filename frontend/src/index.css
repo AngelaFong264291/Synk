@@ -13,12 +13,7 @@
   --code-bg: #eef6f7;
   --shadow: 0 20px 45px rgba(17, 32, 49, 0.08);
 
-  font-family:
-    "Avenir Next",
-    "Segoe UI",
-    Helvetica,
-    Arial,
-    sans-serif;
+  font-family: "Avenir Next", "Segoe UI", Helvetica, Arial, sans-serif;
   line-height: 1.5;
   color: var(--text-strong);
   background: #fffdf7;
@@ -407,8 +402,11 @@ ul {
 }
 
 .diff-card-highlight {
-  background:
-    linear-gradient(180deg, rgba(15, 118, 110, 0.08), rgba(255, 255, 255, 0.9));
+  background: linear-gradient(
+    180deg,
+    rgba(15, 118, 110, 0.08),
+    rgba(255, 255, 255, 0.9)
+  );
 }
 
 .diff-stats {

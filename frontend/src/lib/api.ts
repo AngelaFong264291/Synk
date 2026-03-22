@@ -91,11 +91,13 @@ function createInviteCode() {
 }
 
 async function getWorkspaceByInviteCode(inviteCode: string) {
-  return pb.collection(collections.workspaces).getFirstListItem<WorkspaceRecord>(
-    pb.filter("inviteCode = {:inviteCode}", {
-      inviteCode: normalizeInviteCode(inviteCode),
-    }),
-  );
+  return pb
+    .collection(collections.workspaces)
+    .getFirstListItem<WorkspaceRecord>(
+      pb.filter("inviteCode = {:inviteCode}", {
+        inviteCode: normalizeInviteCode(inviteCode),
+      }),
+    );
 }
 
 async function getWorkspaceMembership(workspaceId: string, userId?: string) {
@@ -124,10 +126,9 @@ export async function signUp(input: SignUpInput) {
 }
 
 export async function signIn(email: string, password: string) {
-  return pb.collection(collections.users).authWithPassword<UserRecord>(
-    email,
-    password,
-  );
+  return pb
+    .collection(collections.users)
+    .authWithPassword<UserRecord>(email, password);
 }
 
 export function signOut() {
@@ -167,12 +168,14 @@ export async function createWorkspace(input: CreateWorkspaceInput) {
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
     try {
-      workspace = await pb.collection(collections.workspaces).create<WorkspaceRecord>({
-        name: input.name,
-        description: input.description,
-        owner: user.id,
-        inviteCode: createInviteCode(),
-      });
+      workspace = await pb
+        .collection(collections.workspaces)
+        .create<WorkspaceRecord>({
+          name: input.name,
+          description: input.description,
+          owner: user.id,
+          inviteCode: createInviteCode(),
+        });
       break;
     } catch (error: unknown) {
       lastError = error;
@@ -234,7 +237,9 @@ export async function listWorkspaceMembers(workspaceId: string) {
 export async function getWorkspace(workspaceId: string) {
   await getWorkspaceMembership(workspaceId);
 
-  return pb.collection(collections.workspaces).getOne<WorkspaceRecord>(workspaceId);
+  return pb
+    .collection(collections.workspaces)
+    .getOne<WorkspaceRecord>(workspaceId);
 }
 
 export async function listWorkspaceDocuments(workspaceId: string) {
@@ -249,11 +254,13 @@ export async function listWorkspaceDocuments(workspaceId: string) {
 export async function listWorkspaceDocumentsWithExpand(workspaceId: string) {
   await getWorkspaceMembership(workspaceId);
 
-  return pb.collection(collections.documents).getFullList<DocumentRecordWithExpand>({
-    filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
-    sort: "-updated",
-    expand: "owner",
-  });
+  return pb
+    .collection(collections.documents)
+    .getFullList<DocumentRecordWithExpand>({
+      filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
+      sort: "-updated",
+      expand: "owner",
+    });
 }
 
 export async function createDocument(input: CreateDocumentInput) {
@@ -270,17 +277,19 @@ export async function createDocument(input: CreateDocumentInput) {
   });
 }
 
-export async function updateDocument(documentId: string, input: UpdateDocumentInput) {
+export async function updateDocument(
+  documentId: string,
+  input: UpdateDocumentInput,
+) {
   const current = await pb
     .collection(collections.documents)
     .getOne<DocumentRecord>(documentId);
 
   await getWorkspaceMembership(current.workspace);
 
-  return pb.collection(collections.documents).update<DocumentRecord>(
-    documentId,
-    input,
-  );
+  return pb
+    .collection(collections.documents)
+    .update<DocumentRecord>(documentId, input);
 }
 
 export async function listDocumentVersions(documentId: string) {
@@ -290,10 +299,12 @@ export async function listDocumentVersions(documentId: string) {
 
   await getWorkspaceMembership(document.workspace);
 
-  return pb.collection(collections.documentVersions).getFullList<DocumentVersionRecord>({
-    filter: pb.filter("document = {:document}", { document: documentId }),
-    sort: "-created",
-  });
+  return pb
+    .collection(collections.documentVersions)
+    .getFullList<DocumentVersionRecord>({
+      filter: pb.filter("document = {:document}", { document: documentId }),
+      sort: "-created",
+    });
 }
 
 export async function listDocumentVersionsWithExpand(documentId: string) {
@@ -335,7 +346,9 @@ export async function createDocumentVersion(input: CreateVersionInput) {
     return createdVersion;
   } catch (error: unknown) {
     try {
-      await pb.collection(collections.documentVersions).delete(createdVersion.id);
+      await pb
+        .collection(collections.documentVersions)
+        .delete(createdVersion.id);
       await updateDocument(document.id, { currentContent: previousContent });
     } catch {
       // Best-effort rollback only; preserve the original error below.
@@ -379,7 +392,9 @@ export async function createTask(input: CreateTaskInput) {
 }
 
 export async function updateTask(taskId: string, input: UpdateTaskInput) {
-  const current = await pb.collection(collections.tasks).getOne<TaskRecord>(taskId);
+  const current = await pb
+    .collection(collections.tasks)
+    .getOne<TaskRecord>(taskId);
   await getWorkspaceMembership(current.workspace);
 
   return pb.collection(collections.tasks).update<TaskRecord>(taskId, input);
@@ -401,11 +416,13 @@ export async function listWorkspaceDecisions(workspaceId: string) {
 export async function listWorkspaceDecisionsWithExpand(workspaceId: string) {
   await getWorkspaceMembership(workspaceId);
 
-  return pb.collection(collections.decisions).getFullList<DecisionRecordWithExpand>({
-    filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
-    sort: "-decidedAt",
-    expand: "owner,linkedTask,linkedDocument",
-  });
+  return pb
+    .collection(collections.decisions)
+    .getFullList<DecisionRecordWithExpand>({
+      filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
+      sort: "-decidedAt",
+      expand: "owner,linkedTask,linkedDocument",
+    });
 }
 
 export async function createDecision(input: CreateDecisionInput) {
@@ -424,7 +441,9 @@ export async function createDecision(input: CreateDecisionInput) {
   });
 }
 
-export async function getDashboardSnapshot(workspaceId: string): Promise<DashboardSnapshot> {
+export async function getDashboardSnapshot(
+  workspaceId: string,
+): Promise<DashboardSnapshot> {
   await getWorkspaceMembership(workspaceId);
 
   const documents = await listWorkspaceDocumentsWithExpand(workspaceId);
@@ -439,13 +458,12 @@ export async function getDashboardSnapshot(workspaceId: string): Promise<Dashboa
         .sort((left, right) => right.created.localeCompare(left.created))
     : [];
 
-  const [workspace, members, tasks, recentDecisions] =
-    await Promise.all([
-      getWorkspace(workspaceId),
-      listWorkspaceMembers(workspaceId),
-      listWorkspaceTasks(workspaceId),
-      listWorkspaceDecisions(workspaceId),
-    ]);
+  const [workspace, members, tasks, recentDecisions] = await Promise.all([
+    getWorkspace(workspaceId),
+    listWorkspaceMembers(workspaceId),
+    listWorkspaceTasks(workspaceId),
+    listWorkspaceDecisions(workspaceId),
+  ]);
 
   return {
     workspace,
@@ -483,8 +501,9 @@ export async function getDocumentBundle(documentId: string) {
 }
 
 export async function getWorkspaceDashboardBundle(workspaceId?: string) {
-  const targetWorkspace =
-    workspaceId ? await getWorkspace(workspaceId) : await getDefaultWorkspace();
+  const targetWorkspace = workspaceId
+    ? await getWorkspace(workspaceId)
+    : await getDefaultWorkspace();
 
   if (!targetWorkspace) {
     throw new Error("No workspace found for current user");
