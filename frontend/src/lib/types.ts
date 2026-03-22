@@ -59,6 +59,7 @@ export type DocumentRecord = BaseRecord & {
   workspace: string;
   title: string;
   currentContent: string;
+  file?: string;
   owner: string;
   visibility: DocumentVisibility;
   allowedMembers?: string[];

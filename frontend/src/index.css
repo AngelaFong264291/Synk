@@ -544,19 +544,3 @@ ul {
     align-items: flex-start;
   }
 }
-
-.doc-preview img {
-  max-width: 100%;
-  height: auto;
-}
-
-.doc-preview table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.doc-preview td,
-.doc-preview th {
-  border: 1px solid #ccc;
-  padding: 0.5rem;
-}

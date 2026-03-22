@@ -5,7 +5,17 @@ import { useActiveWorkspace } from "../lib/useActiveWorkspace";
 import type { DocumentRecord } from "../lib/types";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill } from "../components/StatusPill";
-import parseDOCX from "../parsing/parseDOCX.js";
+import { pb } from "../lib/pocketbase";
+
+function getFileIcon(fileName?: string) {
+  if (!fileName) return "📄";
+  const lower = fileName.toLowerCase();
+  if (lower.endsWith(".docx") || lower.endsWith(".docm")) return "📘";
+  if (lower.endsWith(".xlsx") || lower.endsWith(".xlsm")) return "📗";
+  if (lower.endsWith(".pptx") || lower.endsWith(".pptm")) return "📙";
+  if (lower.endsWith(".pdf")) return "📕";
+  return "📄";
+}
 
 export function Documents() {
   const { activeWorkspace } = useActiveWorkspace();
@@ -55,7 +65,7 @@ export function Documents() {
     };
   }, [activeWorkspace]);
 
-  async function onDocxUpload(
+  async function onFileUpload(
     event: React.ChangeEvent<HTMLInputElement>,
   ) {
     const file = event.target.files?.[0];
@@ -69,13 +79,31 @@ export function Documents() {
     setError(null);
 
     try {
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      const parsedContent = await parseDOCX(bytes);
+      let title = file.name;
+      const lowerName = file.name.toLowerCase();
+
+      if (lowerName.endsWith(".docx")) {
+        title = file.name.replace(/\.docx$/i, "");
+      } else if (lowerName.endsWith(".docm")) {
+        title = file.name.replace(/\.docm$/i, "");
+      } else if (lowerName.endsWith(".xlsx")) {
+        title = file.name.replace(/\.xlsx$/i, "");
+      } else if (lowerName.endsWith(".xlsm")) {
+        title = file.name.replace(/\.xlsm$/i, "");
+      } else if (lowerName.endsWith(".pptx")) {
+        title = file.name.replace(/\.pptx$/i, "");
+      } else if (lowerName.endsWith(".pptm")) {
+        title = file.name.replace(/\.pptm$/i, "");
+      } else if (lowerName.endsWith(".pdf")) {
+        title = file.name.replace(/\.pdf$/i, "");
+      } else {
+        throw new Error("Unsupported file type");
+      }
 
       const nextDocument = await createDocument({
         workspaceId: activeWorkspace.id,
-        title: file.name.replace(/\.docx$/i, ""),
-        currentContent: parsedContent,
+        title: title,
+        file: file,
       });
 
       setDocuments((current) => [nextDocument, ...current]);
@@ -114,17 +142,17 @@ export function Documents() {
           </div>
 
           <label className="field">
-            <span>Select DOCX file</span>
+            <span>Select DOCX, XLSX, PPTX, or PDF file</span>
             <input
               type="file"
-              accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-              onChange={onDocxUpload}
+              accept=".docx,.docm,.xlsx,.xlsm,.pptx,.pptm,.pdf"
+              onChange={onFileUpload}
               disabled={!activeWorkspace || pendingUpload}
             />
           </label>
 
           <p className="muted">
-            The uploaded .docx file will be parsed and saved as a new document immediately.
+            The uploaded file will be parsed and saved as a new document immediately.
           </p>
         </form>
 
@@ -159,13 +187,10 @@ export function Documents() {
           <article key={document.id} className="panel card-hover">
             <div className="row space-between gap-md wrap">
               <div>
-                <h2>{document.title}</h2>
-                <div
-                  className="doc-preview"
-                  dangerouslySetInnerHTML={{
-                    __html: document.currentContent || "<p>No content yet.</p>",
-                  }}
-                />
+                <h2 className="row align-center gap-sm">
+                  <span>{getFileIcon(document.file)}</span>
+                  <span>{document.title}</span>
+                </h2>
               </div>
               <StatusPill
                 tone={document.visibility === "workspace" ? "accent" : "warning"}
@@ -188,7 +213,7 @@ export function Documents() {
 
         {!loading && activeWorkspace && documents.length === 0 ? (
           <p className="muted">
-            No documents yet. Upload your first DOCX to start the snapshot flow.
+            No documents yet. Upload a DOCX, XLSX, PPTX, or PDF file to start.
           </p>
         ) : null}
       </div>

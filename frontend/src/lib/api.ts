@@ -32,14 +32,14 @@ type CreateWorkspaceInput = {
 type CreateDocumentInput = {
   workspaceId: string;
   title: string;
-  currentContent?: string;
+  file?: File;
   visibility?: "workspace" | "private";
   allowedMembers?: string[];
 };
 
 type UpdateDocumentInput = {
   title?: string;
-  currentContent?: string;
+  file?: File;
   visibility?: "workspace" | "private";
   allowedMembers?: string[];
 };
@@ -260,14 +260,21 @@ export async function createDocument(input: CreateDocumentInput) {
   const user = requireCurrentUser();
   await getWorkspaceMembership(input.workspaceId, user.id);
 
-  return pb.collection(collections.documents).create<DocumentRecord>({
-    workspace: input.workspaceId,
-    title: input.title,
-    currentContent: input.currentContent ?? "",
-    owner: user.id,
-    visibility: input.visibility ?? "workspace",
-    allowedMembers: input.allowedMembers ?? [],
-  });
+  const formData = new FormData();
+  formData.append("workspace", input.workspaceId);
+  formData.append("title", input.title);
+  formData.append("owner", user.id);
+  formData.append("visibility", input.visibility ?? "workspace");
+  if (input.file) {
+    formData.append("file", input.file);
+  }
+  if (input.allowedMembers) {
+    input.allowedMembers.forEach((memberId) => {
+      formData.append("allowedMembers", memberId);
+    });
+  }
+
+  return pb.collection(collections.documents).create<DocumentRecord>(formData);
 }
 
 export async function updateDocument(documentId: string, input: UpdateDocumentInput) {
@@ -277,10 +284,22 @@ export async function updateDocument(documentId: string, input: UpdateDocumentIn
 
   await getWorkspaceMembership(current.workspace);
 
-  return pb.collection(collections.documents).update<DocumentRecord>(
-    documentId,
-    input,
-  );
+  const formData = new FormData();
+  if (input.title !== undefined) formData.append("title", input.title);
+  if (input.file !== undefined) formData.append("file", input.file);
+  if (input.visibility !== undefined)
+    formData.append("visibility", input.visibility);
+  if (input.allowedMembers !== undefined) {
+    input.allowedMembers.forEach((memberId) => {
+      formData.append("allowedMembers", memberId);
+    });
+  }
+
+  // If formData is empty, we can just send the input object, but since we are handling file it's safer to use formData if any field is provided.
+  // Actually, we should check if we have any entries.
+  return pb
+    .collection(collections.documents)
+    .update<DocumentRecord>(documentId, formData);
 }
 
 export async function listDocumentVersions(documentId: string) {
