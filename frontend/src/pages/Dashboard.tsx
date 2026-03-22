@@ -94,9 +94,7 @@ export function Dashboard() {
 
       {source === "demo" ? (
         <div className="panel">
-          <p className="muted">
-            Showing demo fallback data.
-          </p>
+          <p className="muted">Showing demo fallback data.</p>
           <p className="muted">
             {data.error
               ? `Live PocketBase data failed to load: ${data.error}`

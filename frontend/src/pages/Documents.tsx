@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type SubmitEvent } from "react";
 import { Link } from "react-router-dom";
 import { createDocument, listWorkspaceDocuments } from "../lib/api";
 import { useActiveWorkspace } from "../lib/useActiveWorkspace";
@@ -58,7 +58,7 @@ export function Documents() {
     };
   }, [activeWorkspace]);
 
-  async function onCreateDocument(event: FormEvent) {
+  async function onCreateDocument(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!activeWorkspace) {
@@ -199,10 +199,14 @@ export function Documents() {
             <div className="row space-between gap-md wrap">
               <div>
                 <h2>{document.title}</h2>
-                <p>{document.currentContent.slice(0, 140) || "No content yet."}</p>
+                <p>
+                  {document.currentContent.slice(0, 140) || "No content yet."}
+                </p>
               </div>
               <StatusPill
-                tone={document.visibility === "workspace" ? "accent" : "warning"}
+                tone={
+                  document.visibility === "workspace" ? "accent" : "warning"
+                }
               >
                 {document.visibility}
               </StatusPill>

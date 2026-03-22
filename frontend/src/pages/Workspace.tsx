@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type SubmitEvent } from "react";
 import { Link } from "react-router-dom";
 import { listWorkspaceMembers } from "../lib/api";
 import { useActiveWorkspace } from "../lib/useActiveWorkspace";
@@ -6,11 +6,7 @@ import type { WorkspaceMemberWithExpand } from "../lib/types";
 import { StatusPill } from "../components/StatusPill";
 
 function getMemberLabel(member: WorkspaceMemberWithExpand) {
-  return (
-    member.expand?.user?.name ||
-    member.expand?.user?.email ||
-    member.user
-  );
+  return member.expand?.user?.name || member.expand?.user?.email || member.user;
 }
 
 function getInitials(value: string) {
@@ -88,7 +84,7 @@ export function Workspace() {
     };
   }, [activeWorkspaceId]);
 
-  async function onCreateWorkspace(event: FormEvent) {
+  async function onCreateWorkspace(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     setActionError(null);
     setPendingAction("create");
@@ -110,7 +106,7 @@ export function Workspace() {
     }
   }
 
-  async function onJoinWorkspace(event: FormEvent) {
+  async function onJoinWorkspace(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     setActionError(null);
     setPendingAction("join");
@@ -120,7 +116,9 @@ export function Workspace() {
       setInviteCode("");
     } catch (joinError: unknown) {
       setActionError(
-        joinError instanceof Error ? joinError.message : "Unable to join workspace",
+        joinError instanceof Error
+          ? joinError.message
+          : "Unable to join workspace",
       );
     } finally {
       setPendingAction(null);
@@ -289,7 +287,9 @@ export function Workspace() {
             <span>Invite code</span>
             <input
               value={inviteCode}
-              onChange={(event) => setInviteCode(event.target.value.toUpperCase())}
+              onChange={(event) =>
+                setInviteCode(event.target.value.toUpperCase())
+              }
               placeholder="SYNK42"
               required
             />

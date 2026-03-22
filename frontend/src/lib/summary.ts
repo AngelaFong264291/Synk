@@ -46,7 +46,7 @@ function statusLabel(status: Task["status"]) {
 function createActivityFeed(input: DashboardSummaryInput): ActivityItem[] {
   const versionActivity = input.documents.flatMap((document) =>
     document.versions.map((version) => ({
-      id: version.id,
+      id: `${document.id}-${version.id}`,
       label: version.label,
       detail: `${document.title} snapshot saved`,
       actor: version.author,
@@ -76,7 +76,9 @@ function createActivityFeed(input: DashboardSummaryInput): ActivityItem[] {
   return [...versionActivity, ...decisionActivity, ...taskActivity].slice(0, 8);
 }
 
-function createContributorStats(input: DashboardSummaryInput): ContributorStat[] {
+function createContributorStats(
+  input: DashboardSummaryInput,
+): ContributorStat[] {
   const scoreByName = new Map<string, number>();
   const focusByName = new Map<string, string>();
 
@@ -87,7 +89,10 @@ function createContributorStats(input: DashboardSummaryInput): ContributorStat[]
 
   for (const document of input.documents) {
     for (const version of document.versions) {
-      scoreByName.set(version.author, (scoreByName.get(version.author) ?? 0) + 1);
+      scoreByName.set(
+        version.author,
+        (scoreByName.get(version.author) ?? 0) + 1,
+      );
       focusByName.set(version.author, `Versions on ${document.title}`);
     }
   }
@@ -113,7 +118,9 @@ function createContributorStats(input: DashboardSummaryInput): ContributorStat[]
 }
 
 function getOverdueTasks(tasks: Task[]) {
-  return tasks.filter((task) => task.status !== "Done" && task.dueDate === "Today");
+  return tasks.filter(
+    (task) => task.status !== "Done" && task.dueDate === "Today",
+  );
 }
 
 export function createDashboardSummary(

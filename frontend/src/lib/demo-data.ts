@@ -181,12 +181,15 @@ export const decisions: Decision[] = [
     title: "Keep diff MVP plain text",
     owner: "Benjamin",
     date: "Mar 21",
-    context: "Rich text diff would slow down the build and complicate the demo.",
+    context:
+      "Rich text diff would slow down the build and complicate the demo.",
     outcome: "Ship named snapshots and a clean text comparison view first.",
     linkedTo: "MVP Narrative",
   },
 ];
 
 export function getDocumentById(documentId: string) {
-  return documents.find((document) => document.id === documentId) ?? documents[0];
+  return (
+    documents.find((document) => document.id === documentId) ?? documents[0]
+  );
 }

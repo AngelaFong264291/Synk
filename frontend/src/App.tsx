@@ -10,6 +10,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
 import { NotFound } from "./pages/NotFound";
+import { Register } from "./pages/Register";
 import { Tasks } from "./pages/Tasks";
 import { Workspace } from "./pages/Workspace";
 
@@ -22,6 +23,7 @@ export default function App() {
             <Route index element={<Home />} />
             <Route path="about" element={<About />} />
             <Route path="login" element={<Login />} />
+            <Route path="register" element={<Register />} />
             <Route
               path="dashboard"
               element={
