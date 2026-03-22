@@ -59,7 +59,6 @@ export function Layout() {
                 <NavLink to="/workspace">Workspaces</NavLink>
                 <NavLink to="/documents">Documents</NavLink>
                 <NavLink to="/tasks">Tasks</NavLink>
-                <NavLink to="/decisions">Decisions</NavLink>
               </>
             ) : (
               <>

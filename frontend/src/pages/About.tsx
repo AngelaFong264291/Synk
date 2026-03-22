@@ -5,8 +5,7 @@ export function About() {
       <p>
         Synk is a collaboration hub for groups who need lightweight
         accountability without developer-only tooling. This frontend focuses on
-        the hackathon MVP: workspaces, documents, snapshots, tasks, and
-        decisions.
+        the hackathon MVP: workspaces, documents, snapshots, and tasks.
       </p>
       <div className="panel">
         <h2>MVP checklist</h2>
@@ -15,7 +14,6 @@ export function About() {
           <li>Workspace overview and invite code</li>
           <li>Documents with named snapshot history</li>
           <li>Task board with ownership and status</li>
-          <li>Decision log for project alignment</li>
         </ul>
       </div>
     </section>

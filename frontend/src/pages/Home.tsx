@@ -11,8 +11,7 @@ export function Home() {
         <div className="stack">
           <p className="eyebrow">Hackathon collaboration OS</p>
           <h1>
-            Synk gives your workspace one place to track changes, ownership, and
-            decisions.
+            Synk gives your workspace one place to track changes and ownership.
           </h1>
           <p className="hero-copy">
             Build the demo around a single shared workspace instead of chasing

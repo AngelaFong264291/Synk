@@ -246,7 +246,7 @@ export function Workspace() {
                 </p>
                 <p className="workspace-highlight-description">
                   {activeWorkspace.description ||
-                    "No description yet. Use this space to coordinate documents, tasks, and decisions."}
+                    "No description yet. Use this space to coordinate documents and tasks."}
                 </p>
               </div>
               <div className="workspace-highlight-meta">

@@ -50,12 +50,6 @@ export function Dashboard() {
         title: task.title,
         meta: `${task.assignee} • ${task.status}`,
       })),
-      ...data.decisions.slice(0, 2).map((decision) => ({
-        id: `decision-${decision.id}`,
-        label: "Decision",
-        title: decision.title,
-        meta: `${decision.owner} • ${decision.date}`,
-      })),
     ].slice(0, 5);
   }, [data]);
 
@@ -71,7 +65,7 @@ export function Dashboard() {
     );
   }
 
-  const { decisions, documents, tasks, workspace, source } = data;
+  const { documents, tasks, workspace, source } = data;
   const openTasks = tasks.filter((task) => task.status !== "Done");
   const completedTasks = tasks.filter((task) => task.status === "Done");
   const totalSnapshots = documents.reduce(
@@ -81,26 +75,17 @@ export function Dashboard() {
   const dueTodayTasks = tasks.filter((task) => task.dueDate === "Today");
 
   const activeWorkspaceName = activeWorkspace?.name ?? workspace.name;
+  const firstNameRaw =
+    model?.email?.split("@")[0]?.split(/[._-]+/)[0] ?? "teammate";
+  const firstName =
+    firstNameRaw.charAt(0).toUpperCase() + firstNameRaw.slice(1);
 
   return (
     <section className="stack-lg dashboard-page">
       <PageHeader
         eyebrow="Dashboard"
-        title={`Welcome back, ${model?.email ?? "workspace member"}`}
-        description="Jump straight into documents, tasks, or decisions from the current active workspace."
-        actions={
-          <div className="row gap-sm wrap">
-            <Link className="button-link" to="/workspace">
-              Manage workspaces
-            </Link>
-            <Link className="button-link button-link-secondary" to="/documents">
-              Documents
-            </Link>
-            <Link className="button-link button-link-secondary" to="/tasks">
-              Tasks
-            </Link>
-          </div>
-        }
+        title={`Welcome back, ${firstName}`}
+        description={`You're viewing ${activeWorkspaceName}. Jump straight into documents and tasks from the current active workspace.`}
       />
 
       <section className="dashboard-focus-card">
@@ -119,7 +104,7 @@ export function Dashboard() {
             </strong>
             <p>
               {activeWorkspaceId
-                ? "The header selector controls what Documents, Tasks, and Decisions are showing."
+                ? "The header selector controls what Documents and Tasks are showing."
                 : "Create or join a workspace before starting documents and tasks."}
             </p>
           </div>
@@ -133,12 +118,6 @@ export function Dashboard() {
           <Link className="dashboard-quick-card" to="/tasks">
             <strong>Tasks</strong>
             <p>Track owners, status, due dates, and linked documents.</p>
-          </Link>
-          <Link className="dashboard-quick-card" to="/decisions">
-            <strong>Decisions</strong>
-            <p>
-              Capture product choices so the workspace has a visible record.
-            </p>
           </Link>
         </div>
 
@@ -161,11 +140,6 @@ export function Dashboard() {
           <span className="dashboard-kpi-label">Task Ownership</span>
           <strong className="stat-value">{openTasks.length}</strong>
           <p>Open tasks, with {dueTodayTasks.length} due today</p>
-        </article>
-        <article className="stat-card dashboard-metric-card">
-          <span className="dashboard-kpi-label">Decision Log</span>
-          <strong className="stat-value">{decisions.length}</strong>
-          <p>Structured decisions captured for the project</p>
         </article>
         <article className="stat-card dashboard-metric-card">
           <span className="dashboard-kpi-label">Delivery Progress</span>
@@ -220,8 +194,8 @@ export function Dashboard() {
             <article className="feature-check">
               <strong>1. Choose the active workspace from the header</strong>
               <p>
-                Everything in Documents, Tasks, and Decisions follows the
-                workspace selected in the top-right chip.
+                Everything in Documents and Tasks follows the workspace
+                selected in the top-right chip.
               </p>
             </article>
             <article className="feature-check">

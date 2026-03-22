@@ -4,7 +4,6 @@ import { ActiveWorkspaceProvider } from "./lib/ActiveWorkspaceProvider";
 import { Layout } from "./components/Layout";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { About } from "./pages/About";
-import { Decisions } from "./pages/Decisions";
 import { DocumentDetail } from "./pages/DocumentDetail";
 import { Documents } from "./pages/Documents";
 import { Dashboard } from "./pages/Dashboard";
@@ -67,14 +66,6 @@ export default function App() {
                 element={
                   <ProtectedRoute>
                     <Tasks />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="decisions"
-                element={
-                  <ProtectedRoute>
-                    <Decisions />
                   </ProtectedRoute>
                 }
               />
