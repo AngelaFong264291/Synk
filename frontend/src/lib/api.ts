@@ -131,6 +131,23 @@ async function getWorkspaceByInviteCode(inviteCode: string) {
   }
 }
 
+async function recoverWorkspaceAfterCreateFailure(
+  input: CreateWorkspaceInput,
+  ownerId: string,
+) {
+  try {
+    const existing = await getWorkspaceByInviteCode(input.inviteCode);
+
+    if (existing.owner === ownerId && existing.name === input.name) {
+      return existing;
+    }
+  } catch {
+    // If recovery lookup fails, preserve the original create error.
+  }
+
+  return null;
+}
+
 async function getOwnedTeam(workspaceId: string, userId: string) {
   try {
     const team = await pb.collection(collections.teams).getOne<WorkspaceRecord>(workspaceId);
@@ -350,19 +367,49 @@ export async function createWorkspace(input: CreateWorkspaceInput) {
     }
     return workspace;
   } catch (error: unknown) {
+    const recovered = await recoverWorkspaceAfterCreateFailure(
+      {
+        ...input,
+        inviteCode: normalizedCode,
+      },
+      user.id,
+    );
+
+    if (recovered) {
+      return recovered;
+    }
+
     if (!isMissingCollectionError(error)) {
       throw error;
     }
   }
 
-  const workspace = await pb
-    .collection(collections.workspaces)
-    .create<WorkspaceRecord>({
-      name: input.name,
-      description: input.description,
-      owner: user.id,
-      inviteCode: normalizedCode,
-    });
+  let workspace: WorkspaceRecord;
+
+  try {
+    workspace = await pb
+      .collection(collections.workspaces)
+      .create<WorkspaceRecord>({
+        name: input.name,
+        description: input.description,
+        owner: user.id,
+        inviteCode: normalizedCode,
+      });
+  } catch (error: unknown) {
+    const recovered = await recoverWorkspaceAfterCreateFailure(
+      {
+        ...input,
+        inviteCode: normalizedCode,
+      },
+      user.id,
+    );
+
+    if (recovered) {
+      return recovered;
+    }
+
+    throw error;
+  }
 
   try {
     await ensureWorkspaceMembership(workspace.id, "owner", user.id);
@@ -492,7 +539,7 @@ export async function listWorkspaceDocuments(workspaceId: string) {
 
   return pb.collection(collections.documents).getFullList<DocumentRecord>({
     filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
-    sort: "-updated",
+    sort: "title",
   });
 }
 
@@ -503,7 +550,7 @@ export async function listWorkspaceDocumentsWithExpand(workspaceId: string) {
     .collection(collections.documents)
     .getFullList<DocumentRecordWithExpand>({
       filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
-      sort: "-updated",
+      sort: "title",
       expand: "owner",
     });
 }

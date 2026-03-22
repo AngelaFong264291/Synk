@@ -102,6 +102,9 @@ export function Tasks() {
   const [selectedDocument, setSelectedDocument] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [pendingCreate, setPendingCreate] = useState(false);
+  const assignedTaskCount = tasks.filter((task) => Boolean(task.assignee)).length;
+  const linkedTaskCount = tasks.filter((task) => Boolean(task.document)).length;
+  const dueTaskCount = tasks.filter((task) => Boolean(task.dueDate)).length;
 
   useEffect(() => {
     if (!activeWorkspace) {
@@ -284,35 +287,47 @@ export function Tasks() {
           </button>
         </form>
 
-        <section className="panel stack">
+        <section className="panel stack task-side-panel">
           <div className="row space-between wrap">
-            <h2>Status model</h2>
+            <h2>Board pulse</h2>
             <StatusPill tone={activeWorkspace ? "success" : "warning"}>
               {activeWorkspace ? `${tasks.length} tasks` : "No workspace"}
             </StatusPill>
           </div>
-          <p>
-            The task system now centers on the three workflow states the
-            team
-            asked for: <strong>To Do</strong>, <strong>In Progress</strong>, and{" "}
-            <strong>Done</strong>.
-          </p>
-          <p className="muted">
-            New tasks start in <strong>To Do</strong>. Assign an owner when you
-            create the task, then use the buttons inside each task card to move
-            work between columns during the demo.
-          </p>
+
+          <div className="task-pulse-grid">
+            <article className="task-pulse-card">
+              <span className="task-pulse-label">Assigned</span>
+              <strong>{assignedTaskCount}</strong>
+              <p>{tasks.length - assignedTaskCount} still need an owner</p>
+            </article>
+            <article className="task-pulse-card">
+              <span className="task-pulse-label">Linked</span>
+              <strong>{linkedTaskCount}</strong>
+              <p>{tasks.length - linkedTaskCount} are still general tasks</p>
+            </article>
+            <article className="task-pulse-card">
+              <span className="task-pulse-label">Scheduled</span>
+              <strong>{dueTaskCount}</strong>
+              <p>{tasks.length - dueTaskCount} have no due date yet</p>
+            </article>
+          </div>
         </section>
       </div>
 
       {loading ? <p className="muted">Loading tasks...</p> : null}
 
       {activeWorkspace ? (
-        <section className="panel stack">
+        <section className="panel stack board-shell">
           <div className="row space-between wrap">
             <h2>Board by status</h2>
             <StatusPill tone="accent">{tasks.length} total</StatusPill>
           </div>
+
+          <p className="board-shell-note">
+            Track what is queued, what is moving, and what is ready to show in
+            the final walkthrough.
+          </p>
 
           <div className="board board-polished">
             {columns.map((column) => {
@@ -326,13 +341,6 @@ export function Tasks() {
                   <div className="board-column-top">
                     <div className="row space-between wrap gap-sm">
                       <div className="stack board-column-heading">
-                        <p className="board-column-label">
-                          {column === "todo"
-                            ? "Queue"
-                            : column === "in_progress"
-                              ? "Active"
-                              : "Delivered"}
-                        </p>
                         <h3>{formatTaskStatus(column)}</h3>
                       </div>
                       <StatusPill
@@ -418,7 +426,6 @@ export function Tasks() {
 
                     {!columnTasks.length ? (
                       <div className="board-empty-state">
-                        <span className="board-empty-dot" aria-hidden="true" />
                         <div className="stack">
                           <strong>No tasks yet</strong>
                           <p className="muted">

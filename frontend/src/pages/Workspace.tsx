@@ -1,5 +1,4 @@
 import { useEffect, useState, type SubmitEvent } from "react";
-import { Link } from "react-router-dom";
 import { listWorkspaceMembers } from "../lib/api";
 import { useActiveWorkspace } from "../lib/useActiveWorkspace";
 import type { WorkspaceMemberWithExpand } from "../lib/types";
@@ -121,6 +120,7 @@ export function Workspace() {
         description: "",
         inviteCode: createInviteCode,
       });
+      setActionError(null);
       setCreateName("");
       setCreateInviteCode("");
     } catch (createError: unknown) {
@@ -141,6 +141,7 @@ export function Workspace() {
 
     try {
       await joinWorkspaceAndSelect(inviteCode);
+      setActionError(null);
       setInviteCode("");
     } catch (joinError: unknown) {
       setActionError(
@@ -160,9 +161,9 @@ export function Workspace() {
           <p className="eyebrow">Workspaces</p>
           <h1>Your Workspaces</h1>
           <p className="workspace-hero-text">
-            Create a workspace, share one invite code, and keep documents,
-            tasks, and decisions moving in the same place without losing the
-            handoff.
+            Use this page for workspace management only: create a workspace,
+            join one, switch the active workspace, and check members or invite
+            code.
           </p>
         </div>
         <div className="workspace-hero-illustration" aria-hidden="true">
@@ -171,8 +172,8 @@ export function Workspace() {
           <div className="workspace-illustration-card workspace-illustration-card-top">
             <span className="workspace-illustration-dot" />
             <div className="stack">
-              <strong>Live board</strong>
-              <p>Tasks, notes, and handoffs stay aligned.</p>
+              <strong>Workspace setup</strong>
+              <p>Create, switch, and invite from one place.</p>
             </div>
           </div>
           <div className="workspace-illustration-card workspace-illustration-card-side">
@@ -235,18 +236,14 @@ export function Workspace() {
                 <p className="workspace-invite-code">
                   {getWorkspaceInviteCode(activeWorkspace)}
                 </p>
-                <p className="workspace-highlight-description">
+              <p className="workspace-highlight-description">
                   {activeWorkspace.description ||
                     "No description yet. Use this space to coordinate documents, tasks, and decisions."}
                 </p>
               </div>
-              <div className="row wrap gap-sm workspace-highlight-actions">
-                <Link className="button-link" to="/documents">
-                  Open documents
-                </Link>
-                <Link className="button-link button-link-secondary" to="/tasks">
-                  Open task board
-                </Link>
+              <div className="workspace-highlight-meta">
+                <span>{memberCountLabel}</span>
+                <span>Invite code ready</span>
               </div>
             </div>
           ) : null}

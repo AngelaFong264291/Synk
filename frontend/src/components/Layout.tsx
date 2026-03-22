@@ -1,9 +1,45 @@
+import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
+import { useActiveWorkspace } from "../lib/useActiveWorkspace";
 import "./Layout.css";
 
 export function Layout() {
   const { isAuthenticated, model, signOut } = useAuth();
+  const {
+    activeWorkspace,
+    activeWorkspaceId,
+    setActiveWorkspaceId,
+    workspaces,
+  } = useActiveWorkspace();
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const workspaceMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!workspaceMenuOpen) {
+      return;
+    }
+
+    function onPointerDown(event: MouseEvent) {
+      if (!workspaceMenuRef.current?.contains(event.target as Node)) {
+        setWorkspaceMenuOpen(false);
+      }
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setWorkspaceMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [workspaceMenuOpen]);
 
   return (
     <div className="app-shell">
@@ -38,6 +74,61 @@ export function Layout() {
         <div className="header-right">
           {isAuthenticated ? (
             <>
+              {workspaces.length ? (
+                <div
+                  ref={workspaceMenuRef}
+                  className="workspace-menu"
+                >
+                  <button
+                    type="button"
+                    className="workspace-chip workspace-chip-button"
+                    onClick={() => setWorkspaceMenuOpen((open) => !open)}
+                    aria-haspopup="menu"
+                    aria-expanded={workspaceMenuOpen}
+                  >
+                    <span className="workspace-chip-label">Active workspace</span>
+                    <span className="workspace-chip-current">
+                      <strong>
+                        {activeWorkspace?.name ?? "Choose workspace"}
+                      </strong>
+                      <span className="workspace-chip-caret">▾</span>
+                    </span>
+                  </button>
+                  {workspaceMenuOpen ? (
+                    <div className="workspace-menu-popover" role="menu">
+                      {workspaces.map((workspace) => {
+                        const isActive = workspace.id === activeWorkspaceId;
+
+                        return (
+                          <button
+                            key={workspace.id}
+                            type="button"
+                            className={`workspace-menu-item${isActive ? " workspace-menu-item-active" : ""}`}
+                            onClick={() => {
+                              setActiveWorkspaceId(workspace.id);
+                              setWorkspaceMenuOpen(false);
+                            }}
+                            role="menuitemradio"
+                            aria-checked={isActive}
+                          >
+                            <span className="workspace-menu-item-title">
+                              {workspace.name}
+                            </span>
+                            {isActive ? (
+                              <span className="workspace-menu-check">✓</span>
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              ) : activeWorkspace ? (
+                <div className="workspace-chip">
+                  <span className="workspace-chip-label">Active workspace</span>
+                  <strong>{activeWorkspace.name}</strong>
+                </div>
+              ) : null}
               <div className="user-chip">
                 <span className="user-chip-dot" />
                 <span>{model?.email ?? "Signed in"}</span>
