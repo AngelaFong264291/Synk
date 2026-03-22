@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { pb } from "../lib/pocketbase";
@@ -32,6 +32,123 @@ export function Dashboard() {
     };
   }, [activeWorkspaceId]);
 
+  const [inviteCode, setInviteCode] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [joinStatus, setJoinStatus] = useState("");
+  const [inviteStatus, setInviteStatus] = useState("");
+  const [isJoining, setIsJoining] = useState(false);
+  const [isInviting, setIsInviting] = useState(false);
+  const [workspaceName, setWorkspaceName] = useState("");
+  const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
+  const [createWorkspaceStatus, setCreateWorkspaceStatus] = useState("");
+
+  async function handleCreateWorkspace(e: FormEvent) {
+    e.preventDefault();
+    setIsCreatingWorkspace(true);
+    setCreateWorkspaceStatus("");
+
+    try {
+      if (!model?.id) throw new Error("Not logged in");
+
+      // generate a simple random code
+      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+
+      await pb.collection('workspaces').create({
+        name: workspaceName,
+        inviteCode: code,
+        owner: model.id
+      });
+
+      setCreateWorkspaceStatus(`Successfully created workspace: ${workspaceName} (Code: ${code})`);
+      setWorkspaceName("");
+    } catch (err: any) {
+      console.error(err);
+      setCreateWorkspaceStatus("Failed to create workspace. Please try again.");
+    } finally {
+      setIsCreatingWorkspace(false);
+    }
+  }
+
+  async function handleJoinWorkspace(e: FormEvent) {
+    e.preventDefault();
+    setIsJoining(true);
+    setJoinStatus("");
+
+    try {
+      if (!model?.id) throw new Error("Not logged in");
+
+      const workspaces = await pb.collection('workspaces').getList(1, 1, {
+        filter: `inviteCode = "${inviteCode}"`
+      });
+
+      if (workspaces.items.length === 0) {
+        throw new Error("Workspace not found with that code");
+      }
+
+      const workspaceRecord = workspaces.items[0];
+
+      // Check if user is already in the workspace
+      const existingMembers = await pb.collection('workspace_members').getList(1, 1, {
+        filter: `workspace = "${workspaceRecord.id}" && user = "${model.id}"`
+      });
+
+      if (existingMembers.items.length > 0) {
+        setJoinStatus(`You are already a member of workspace: ${workspaceRecord.name}`);
+        setInviteCode("");
+        return;
+      }
+
+      await pb.collection('workspace_members').create({
+        user: model.id,
+        workspace: workspaceRecord.id,
+        role: "member"
+      });
+
+      setJoinStatus(`Successfully joined workspace: ${workspaceRecord.name}`);
+      setInviteCode("");
+    } catch (err: any) {
+      console.error(err);
+      setJoinStatus(err.message || "Failed to join workspace. Please check the code and try again.");
+    } finally {
+      setIsJoining(false);
+    }
+  }
+
+  async function handleSendInvite(e: FormEvent) {
+    e.preventDefault();
+    setIsInviting(true);
+    setInviteStatus("");
+
+    try {
+      if (!model?.id) throw new Error("Not logged in");
+
+      // Assuming the user is part of a workspace, let's just get their first workspace for now
+      const myWorkspaces = await pb.collection('workspace_members').getList(1, 1, {
+        filter: `user = "${model.id}"`
+      });
+
+      if (myWorkspaces.items.length === 0) {
+        throw new Error("You must be part of a workspace to send invites");
+      }
+
+      const workspaceId = myWorkspaces.items[0].workspace;
+
+      await pb.collection('workspace_invites').create({
+        email: inviteEmail,
+        inviter: model.id,
+        workspace: workspaceId
+      });
+
+      setInviteStatus(`An invite has been sent to ${inviteEmail}`);
+      setInviteEmail("");
+    } catch (err: any) {
+      console.error(err);
+      setInviteStatus(err.message || "Failed to send invite. Please try again.");
+    } finally {
+      setIsInviting(false);
+    }
+  }
+
   if (!data) {
     return (
       <section className="stack-lg">
@@ -46,122 +163,7 @@ export function Dashboard() {
 
   const { decisions, documents, members, tasks, workspace, source } = data;
   const openTasks = tasks.filter((task) => task.status !== "Done");
-  const [inviteCode, setInviteCode] = useState("");
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [joinStatus, setJoinStatus] = useState("");
-  const [inviteStatus, setInviteStatus] = useState("");
-  const [isJoining, setIsJoining] = useState(false);
-  const [isInviting, setIsInviting] = useState(false);
-  const [teamName, setTeamName] = useState("");
-  const [isCreatingTeam, setIsCreatingTeam] = useState(false);
-  const [createTeamStatus, setCreateTeamStatus] = useState("");
 
-  async function handleCreateTeam(e: FormEvent) {
-    e.preventDefault();
-    setIsCreatingTeam(true);
-    setCreateTeamStatus("");
-
-    try {
-      if (!model?.id) throw new Error("Not logged in");
-
-      // generate a simple random code
-      const code = Math.random().toString(36).substring(2, 10).toUpperCase();
-
-      await pb.collection('teams').create({
-        name: teamName,
-        code: code,
-        owner: model.id
-      });
-
-      setCreateTeamStatus(`Successfully created team: ${teamName} (Code: ${code})`);
-      setTeamName("");
-    } catch (err: any) {
-      console.error(err);
-      setCreateTeamStatus("Failed to create team. Please try again.");
-    } finally {
-      setIsCreatingTeam(false);
-    }
-  }
-
-  async function handleJoinTeam(e: FormEvent) {
-    e.preventDefault();
-    setIsJoining(true);
-    setJoinStatus("");
-
-    try {
-      if (!model?.id) throw new Error("Not logged in");
-
-      const teams = await pb.collection('teams').getList(1, 1, {
-        filter: `code = "${inviteCode}"`
-      });
-
-      if (teams.items.length === 0) {
-        throw new Error("Team not found with that code");
-      }
-
-      const team = teams.items[0];
-
-      // Check if user is already in the team
-      const existingMembers = await pb.collection('team_members').getList(1, 1, {
-        filter: `team = "${team.id}" && user = "${model.id}"`
-      });
-
-      if (existingMembers.items.length > 0) {
-        setJoinStatus(`You are already a member of team: ${team.name}`);
-        setInviteCode("");
-        return;
-      }
-
-      await pb.collection('team_members').create({
-        user: model.id,
-        team: team.id
-      });
-
-      setJoinStatus(`Successfully joined team: ${team.name}`);
-      setInviteCode("");
-    } catch (err: any) {
-      console.error(err);
-      setJoinStatus(err.message || "Failed to join team. Please check the code and try again.");
-    } finally {
-      setIsJoining(false);
-    }
-  }
-
-  async function handleSendInvite(e: FormEvent) {
-    e.preventDefault();
-    setIsInviting(true);
-    setInviteStatus("");
-
-    try {
-      if (!model?.id) throw new Error("Not logged in");
-
-      // Assuming the user is part of a team, let's just get their first team for now
-      // A more robust implementation would let them select which team to invite to
-      const myTeams = await pb.collection('team_members').getList(1, 1, {
-        filter: `user = "${model.id}"`
-      });
-
-      if (myTeams.items.length === 0) {
-        throw new Error("You must be part of a team to send invites");
-      }
-
-      const teamId = myTeams.items[0].team;
-
-      await pb.collection('team_invites').create({
-        email: inviteEmail,
-        inviter: model.id,
-        team: teamId
-      });
-
-      setInviteStatus(`An invite has been sent to ${inviteEmail}`);
-      setInviteEmail("");
-    } catch (err: any) {
-      console.error(err);
-      setInviteStatus(err.message || "Failed to send invite. Please try again.");
-    } finally {
-      setIsInviting(false);
-    }
-  }
   const summary = createDashboardSummary({
     workspace,
     documents,
@@ -320,51 +322,51 @@ export function Dashboard() {
       </section>
 
       <section className="stack">
-        <h1>Teams</h1>
+        <h1>Workspaces</h1>
         <p>
-          Manage your teams below. Signed in as <strong>{model?.email ?? model?.id}</strong>
+          Manage your workspaces below. Signed in as <strong>{model?.email ?? model?.id}</strong>
         </p>
 
         <div className="two-column">
           <div className="panel stack">
-            <h2>Create a Team</h2>
-            <form className="stack form" onSubmit={handleCreateTeam}>
+            <h2>Create a Workspace</h2>
+            <form className="stack form" onSubmit={handleCreateWorkspace}>
               <label className="field">
-                <span>Team Name</span>
+                <span>Workspace Name</span>
                 <input
                   type="text"
-                  value={teamName}
-                  onChange={(e) => setTeamName(e.target.value)}
+                  value={workspaceName}
+                  onChange={(e) => setWorkspaceName(e.target.value)}
                   placeholder="e.g. Acme Corp"
                   required
                 />
               </label>
-              <button type="submit" disabled={isCreatingTeam || !teamName}>
-                {isCreatingTeam ? "Creating..." : "Create Team"}
+              <button type="submit" disabled={isCreatingWorkspace || !workspaceName}>
+                {isCreatingWorkspace ? "Creating..." : "Create Workspace"}
               </button>
-              {createTeamStatus && (
-                <p className={createTeamStatus.startsWith("Failed") ? "error" : "muted"}>
-                  {createTeamStatus}
+              {createWorkspaceStatus && (
+                <p className={createWorkspaceStatus.startsWith("Failed") ? "error" : "muted"}>
+                  {createWorkspaceStatus}
                 </p>
               )}
             </form>
           </div>
 
           <div className="panel stack">
-            <h2>Join a Team</h2>
-            <form className="stack form" onSubmit={handleJoinTeam}>
+            <h2>Join a Workspace</h2>
+            <form className="stack form" onSubmit={handleJoinWorkspace}>
               <label className="field">
-                <span>Team Code</span>
+                <span>Workspace Code</span>
                 <input
                   type="text"
                   value={inviteCode}
                   onChange={(e) => setInviteCode(e.target.value)}
-                  placeholder="e.g. TEAM-1234"
+                  placeholder="e.g. DUEQK1"
                   required
                 />
               </label>
               <button type="submit" disabled={isJoining || !inviteCode}>
-                {isJoining ? "Joining..." : "Join Team"}
+                {isJoining ? "Joining..." : "Join Workspace"}
               </button>
               {joinStatus && (
                 <p className={joinStatus.startsWith("Failed") ? "error" : "muted"}>
@@ -376,7 +378,7 @@ export function Dashboard() {
         </div>
 
         <div className="panel stack" style={{ marginTop: "2rem" }}>
-          <h2>Invite to Team</h2>
+          <h2>Invite to Workspace</h2>
           <form className="stack form" onSubmit={handleSendInvite}>
             <label className="field">
               <span>Email Address</span>

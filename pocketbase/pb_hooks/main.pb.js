@@ -1,40 +1,51 @@
 /// <reference path="../pb_data/types.d.ts" />
 
 onRecordAfterCreateSuccess((e) => {
-    // Automatically create a team_members entry when a new team is created
-    const team = e.record;
+    // Automatically create a workspace_members entry when a new workspace is created
+    const workspace = e.record;
     
-    const teamMembersCollection = $app.findCollectionByNameOrId("team_members");
+    let workspaceMembersCollection;
+    try {
+        workspaceMembersCollection = $app.findCollectionByNameOrId("workspace_members");
+    } catch(err) {
+        return e.next();
+    }
     
-    const record = new Record(teamMembersCollection, {
-        "team": team.getId(),
-        "user": team.get("owner")
-    });
-    
-    $app.save(record);
+    if (workspaceMembersCollection) {
+        const record = new Record(workspaceMembersCollection, {
+            "workspace": workspace.getId(),
+            "user": workspace.get("owner"),
+            "role": "owner"
+        });
+        
+        try {
+            $app.save(record);
+        } catch(err) {
+            console.error("Failed to add owner to workspace_members:", err);
+        }
+    }
     
     e.next();
-}, "teams");
+}, "workspaces");
 
 onRecordAfterCreateSuccess((e) => {
     // Send email when invite is created
     const invite = e.record;
     const email = invite.get("email");
     const inviterId = invite.get("inviter");
-    const teamId = invite.get("team");
+    const workspaceId = invite.get("workspace");
     
-    console.log(`Processing team_invites creation for email: ${email}, inviter: ${inviterId}, team: ${teamId}`);
+    console.log(`Processing workspace_invites creation for email: ${email}, inviter: ${inviterId}, workspace: ${workspaceId}`);
     
     let inviter;
-    let team;
+    let workspace;
     
     try {
         inviter = $app.findRecordById("users", inviterId);
-        team = $app.findRecordById("teams", teamId);
+        workspace = $app.findRecordById("workspaces", workspaceId);
     } catch(err) {
-        console.error(`Failed to find inviter or team: ${err}`);
-        e.next();
-        return;
+        console.error(`Failed to find inviter or workspace: ${err}`);
+        return e.next();
     }
     
     try {
@@ -44,11 +55,11 @@ onRecordAfterCreateSuccess((e) => {
                 name: $app.settings().meta.senderName || "Synk App",
             },
             to:      [{address: email}],
-            subject: `You have been invited to join the team ${team.get("name")} on Synk`,
+            subject: `You have been invited to join the workspace ${workspace.get("name")} on Synk`,
             html:    `<p>Hello,</p>
-                      <p><b>${inviter.get("email")}</b> has invited you to join their team <b>${team.get("name")}</b> on Synk.</p>
-                      <p>You can join by using the following team code:</p>
-                      <h2 style="background: #f4f4f4; padding: 10px; display: inline-block; border-radius: 5px;">${team.get("code")}</h2>
+                      <p><b>${inviter.get("email")}</b> has invited you to join their workspace <b>${workspace.get("name")}</b> on Synk.</p>
+                      <p>You can join by using the following workspace invite code:</p>
+                      <h2 style="background: #f4f4f4; padding: 10px; display: inline-block; border-radius: 5px;">${workspace.get("inviteCode")}</h2>
                       <p>If you don't have an account yet, please sign up first.</p>`,
         });
         
@@ -59,4 +70,4 @@ onRecordAfterCreateSuccess((e) => {
     }
 
     e.next();
-}, "team_invites");
+}, "workspace_invites");
