@@ -1,10 +1,8 @@
 export const collections = {
   users: "users",
-  teams: "teams",
-  teamMembers: "team_members",
-  teamInvites: "team_invites",
   workspaces: "workspaces",
   workspaceMembers: "workspace_members",
+  workspaceInvites: "workspace_invites",
   documents: "documents",
   documentVersions: "document_versions",
   tasks: "tasks",
@@ -65,6 +63,7 @@ export type DocumentRecord = BaseRecord & {
   workspace: string;
   title: string;
   currentContent: string;
+  file?: string;
   owner: string;
   visibility: DocumentVisibility;
   allowedMembers?: string[];

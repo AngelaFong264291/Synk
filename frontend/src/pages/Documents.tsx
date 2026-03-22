@@ -1,9 +1,19 @@
-import { useEffect, useMemo, useState, type SubmitEvent } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { createDocument, listWorkspaceDocuments } from "../lib/api";
 import { useActiveWorkspace } from "../lib/useActiveWorkspace";
 import type { DocumentRecord } from "../lib/types";
 import { StatusPill } from "../components/StatusPill";
+
+function getFileIcon(fileName?: string) {
+  if (!fileName) return "📄";
+  const lower = fileName.toLowerCase();
+  if (lower.endsWith(".docx") || lower.endsWith(".docm")) return "📘";
+  if (lower.endsWith(".xlsx") || lower.endsWith(".xlsm")) return "📗";
+  if (lower.endsWith(".pptx") || lower.endsWith(".pptm")) return "📙";
+  if (lower.endsWith(".pdf")) return "📕";
+  return "📄";
+}
 
 function formatUpdatedAt(value: string) {
   const date = new Date(value);
@@ -25,10 +35,7 @@ export function Documents() {
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-  const [pendingCreate, setPendingCreate] = useState(false);
+  const [pendingUpload, setPendingUpload] = useState(false);
 
   useEffect(() => {
     if (!activeWorkspace) {
@@ -71,53 +78,62 @@ export function Documents() {
     };
   }, [activeWorkspace]);
 
-  async function onCreateDocument(event: SubmitEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function onFileUpload(
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
 
-    if (!activeWorkspace) {
+    if (!file || !activeWorkspace) {
       return;
     }
 
-    setPendingCreate(true);
+    setPendingUpload(true);
     setError(null);
 
     try {
+      let title = file.name;
+      const lowerName = file.name.toLowerCase();
+
+      if (lowerName.endsWith(".docx")) {
+        title = file.name.replace(/\.docx$/i, "");
+      } else if (lowerName.endsWith(".docm")) {
+        title = file.name.replace(/\.docm$/i, "");
+      } else if (lowerName.endsWith(".xlsx")) {
+        title = file.name.replace(/\.xlsx$/i, "");
+      } else if (lowerName.endsWith(".xlsm")) {
+        title = file.name.replace(/\.xlsm$/i, "");
+      } else if (lowerName.endsWith(".pptx")) {
+        title = file.name.replace(/\.pptx$/i, "");
+      } else if (lowerName.endsWith(".pptm")) {
+        title = file.name.replace(/\.pptm$/i, "");
+      } else if (lowerName.endsWith(".pdf")) {
+        title = file.name.replace(/\.pdf$/i, "");
+      } else {
+        throw new Error("Unsupported file type");
+      }
+
       const nextDocument = await createDocument({
         workspaceId: activeWorkspace.id,
-        title,
-        currentContent: content,
+        title: title,
+        file: file,
       });
 
       setDocuments((current) => [nextDocument, ...current]);
-      setTitle("");
-      setContent("");
-    } catch (createError: unknown) {
+    } catch (uploadError: unknown) {
       setError(
-        createError instanceof Error
-          ? createError.message
-          : "Unable to create document",
+        uploadError instanceof Error
+          ? uploadError.message
+          : "Unable to upload document",
       );
     } finally {
-      setPendingCreate(false);
+      setPendingUpload(false);
     }
   }
 
   const uniqueOwners = new Set(documents.map((document) => document.owner)).size;
-  const snapshotReadyCount = documents.filter(
-    (document) => document.currentContent.trim().length > 0,
-  ).length;
+  const snapshotReadyCount = documents.length; // Simplified as currentContent is no longer parsed on upload
   const latestDocument = documents[0] ?? null;
-  const emptyState = !loading && activeWorkspace && documents.length === 0;
-
-  const documentCards = useMemo(
-    () =>
-      documents.map((document) => ({
-        ...document,
-        preview: document.currentContent.slice(0, 160) || "No content yet.",
-        updatedLabel: formatUpdatedAt(document.updated),
-      })),
-    [documents],
-  );
 
   return (
     <section className="stack-xl documents-page">
@@ -208,7 +224,7 @@ export function Documents() {
       </div>
 
       <div className="two-column documents-top-grid">
-        <form className="panel stack documents-create-card" onSubmit={onCreateDocument}>
+        <form className="panel stack documents-create-card">
           <div className="row space-between wrap">
             <h2>New document</h2>
             <StatusPill tone={activeWorkspace ? "accent" : "warning"}>
@@ -217,30 +233,18 @@ export function Documents() {
           </div>
 
           <label className="field">
-            <span>Title</span>
+            <span>Select DOCX, XLSX, PPTX, or PDF file</span>
             <input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="Launch brief"
-              required
-              disabled={!activeWorkspace}
+              type="file"
+              accept=".docx,.docm,.xlsx,.xlsm,.pptx,.pptm,.pdf"
+              onChange={onFileUpload}
+              disabled={!activeWorkspace || pendingUpload}
             />
           </label>
 
-          <label className="field">
-            <span>Initial content</span>
-            <textarea
-              className="textarea"
-              value={content}
-              onChange={(event) => setContent(event.target.value)}
-              placeholder="Write the first version of the document here..."
-              disabled={!activeWorkspace}
-            />
-          </label>
-
-          <button type="submit" disabled={!activeWorkspace || pendingCreate}>
-            {pendingCreate ? "Creating..." : "Create document"}
-          </button>
+          <p className="muted">
+            The uploaded file will be parsed and saved as a new document immediately.
+          </p>
         </form>
 
         <section className="panel stack documents-guide-card">
@@ -308,20 +312,21 @@ export function Documents() {
 
         {loading ? <p className="muted">Loading documents...</p> : null}
 
-        <div className="panel-list">
-          {documentCards.map((document) => (
-            <article key={document.id} className="panel card-hover documents-record">
-              <div className="row space-between gap-md wrap">
-                <div className="stack">
-                  <h3>{document.title}</h3>
-                  <p>{document.preview}</p>
-                </div>
-                <StatusPill
-                  tone={document.visibility === "workspace" ? "accent" : "warning"}
-                >
-                  {document.visibility}
-                </StatusPill>
+        {documents.map((document) => (
+          <article key={document.id} className="panel card-hover">
+            <div className="row space-between gap-md wrap">
+              <div>
+                <h2 className="row align-center gap-sm">
+                  <span>{getFileIcon(document.file)}</span>
+                  <span>{document.title}</span>
+                </h2>
               </div>
+              <StatusPill
+                tone={document.visibility === "workspace" ? "accent" : "warning"}
+              >
+                {document.visibility}
+              </StatusPill>
+            </div>
 
               <div className="document-version-strip">
                 <div className="version-chip">
@@ -330,7 +335,7 @@ export function Documents() {
                 </div>
                 <div className="version-chip">
                   <strong>Last update</strong>
-                  <span>{document.updatedLabel}</span>
+                  <span>{formatUpdatedAt(document.updated)}</span>
                 </div>
                 <div className="version-chip">
                   <strong>Status</strong>
@@ -355,12 +360,11 @@ export function Documents() {
             </article>
           ))}
 
-          {emptyState ? (
-            <p className="muted">
-              No documents yet. Create your first one to start the snapshot flow.
-            </p>
-          ) : null}
-        </div>
+        {!loading && activeWorkspace && documents.length === 0 ? (
+          <p className="muted">
+            No documents yet. Upload a DOCX, XLSX, PPTX, or PDF file to start.
+          </p>
+        ) : null}
       </section>
     </section>
   );

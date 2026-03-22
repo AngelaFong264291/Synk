@@ -1,24 +1,27 @@
-import { useState, type SubmitEvent } from "react";
-import {
-  Link,
-  useLocation,
-  useNavigate,
-  type Location,
-} from "react-router-dom";
+import { useEffect, useState, type FormEvent } from "react";
+import { Link, useLocation, useNavigate, type Location } from "react-router-dom";
 import { pb } from "../lib/pocketbase";
+import { useAuth } from "../auth/useAuth";
 
 export function Login() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { isAuthenticated } = useAuth();
   const state = location.state as { from?: Location } | null | undefined;
   const from = state?.from?.pathname ?? "/dashboard";
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate(from, { replace: true });
+    }
+  }, [isAuthenticated, navigate, from]);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  async function onSubmit(e: SubmitEvent<HTMLFormElement>) {
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
     setPending(true);

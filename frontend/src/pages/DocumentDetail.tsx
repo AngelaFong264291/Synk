@@ -1,79 +1,105 @@
-import { useEffect, useMemo, useState, type SubmitEvent } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
-  createDocumentVersion,
-  listDocumentVersions,
-  listWorkspaceDocuments,
-  updateDocument,
+  getDocumentBundle,
 } from "../lib/api";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill } from "../components/StatusPill";
-import { buildLineDiff, getDiffStats } from "../lib/diff";
-import { useActiveWorkspace } from "../lib/useActiveWorkspace";
-import type { DocumentRecord, DocumentVersionRecord } from "../lib/types";
+import { pb } from "../lib/pocketbase";
 
-function versionLabel(version: DocumentVersionRecord) {
-  return version.versionName || `Snapshot ${version.id.slice(0, 4)}`;
+function getRawFileUrl(document: any) {
+  if (!document.file) return null;
+  let baseUrl = pb.files.getURL(document, document.file);
+  const publicPocketBaseUrl = import.meta.env.VITE_PUBLIC_POCKETBASE_URL;
+  if (publicPocketBaseUrl) {
+    try {
+      const publicUrlObj = new URL(publicPocketBaseUrl);
+      const urlObj = new URL(baseUrl, window.location.origin);
+      urlObj.protocol = publicUrlObj.protocol;
+      urlObj.host = publicUrlObj.host;
+      urlObj.port = publicUrlObj.port;
+      let path = urlObj.pathname;
+      if (publicUrlObj.pathname !== "/") {
+        path = publicUrlObj.pathname.replace(/\/$/, "") + "/" + path.replace(/^\//, "");
+      }
+      urlObj.pathname = path;
+      if (urlObj.host.includes("ngrok")) {
+        urlObj.searchParams.set("ngrok-skip-browser-warning", "1");
+      }
+      // Support bypass for localtunnel if detected
+      if (urlObj.host.includes("localtunnel.me")) {
+        urlObj.searchParams.set("bypass-tunnel-reminder", "1");
+      }
+      baseUrl = urlObj.toString();
+    } catch (e) {}
+  }
+  if (baseUrl.startsWith("/")) {
+    baseUrl = window.location.origin + baseUrl;
+  }
+  return baseUrl;
+}
+
+function getFilePreviewUrl(document: any) {
+  const fileName = document.file?.toLowerCase() || "";
+  const baseUrl = getRawFileUrl(document);
+  if (!baseUrl) return null;
+
+  if (fileName.endsWith(".pdf")) {
+    return baseUrl;
+  }
+
+  if (
+    fileName.endsWith(".docx") ||
+    fileName.endsWith(".docm") ||
+    fileName.endsWith(".xlsx") ||
+    fileName.endsWith(".xlsm") ||
+    fileName.endsWith(".pptx") ||
+    fileName.endsWith(".pptm")
+  ) {
+    const isLocal =
+      window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1" ||
+      window.location.hostname === "[::1]";
+
+    const publicPocketBaseUrl = import.meta.env.VITE_PUBLIC_POCKETBASE_URL;
+    // Only block on localhost if no public override is provided.
+    if (isLocal && !publicPocketBaseUrl) {
+      return null;
+    }
+
+    const encodedUrl = encodeURIComponent(baseUrl);
+    return `https://view.officeapps.live.com/op/embed.aspx?src=${encodedUrl}`;
+  }
+
+  return null;
 }
 
 export function DocumentDetail() {
   const { documentId } = useParams();
-  const { activeWorkspace } = useActiveWorkspace();
-
-  const [document, setDocument] = useState<DocumentRecord | null>(null);
-  const [versions, setVersions] = useState<DocumentVersionRecord[]>([]);
-  const [contentDraft, setContentDraft] = useState("");
-  const [snapshotName, setSnapshotName] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [bundle, setBundle] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [pendingSave, setPendingSave] = useState<"draft" | "snapshot" | null>(
-    null,
-  );
 
   useEffect(() => {
-    if (!activeWorkspace || !documentId) {
-      setDocument(null);
-      setVersions([]);
-      setError(null);
-      setLoading(false);
-      return;
-    }
-
-    const workspaceId = activeWorkspace.id;
-    const currentDocumentId = documentId;
     let cancelled = false;
 
     async function load() {
+      if (!documentId) return;
+
       setLoading(true);
       setError(null);
 
       try {
-        const [documents, nextVersions] = await Promise.all([
-          listWorkspaceDocuments(workspaceId),
-          listDocumentVersions(currentDocumentId),
-        ]);
-
-        if (cancelled) {
-          return;
+        const nextBundle = await getDocumentBundle(documentId);
+        if (!cancelled) {
+          setBundle(nextBundle);
         }
-
-        const nextDocument =
-          documents.find((entry) => entry.id === currentDocumentId) ?? null;
-
-        setDocument(nextDocument);
-        setVersions(nextVersions);
-        setLeftVersionId("");
-        setRightVersionId("");
-        setContentDraft(nextDocument?.currentContent ?? "");
-        setSnapshotName(
-          nextVersions[0] ? `${versionLabel(nextVersions[0])} follow-up` : "",
-        );
       } catch (loadError: unknown) {
         if (!cancelled) {
           setError(
             loadError instanceof Error
               ? loadError.message
-              : "Unable to load document details",
+              : "Unable to load document",
           );
         }
       } finally {
@@ -88,264 +114,135 @@ export function DocumentDetail() {
     return () => {
       cancelled = true;
     };
-  }, [activeWorkspace, documentId]);
+  }, [documentId]);
 
-  const [leftVersionId, setLeftVersionId] = useState("");
-  const [rightVersionId, setRightVersionId] = useState("");
-  const effectiveLeftVersionId =
-    leftVersionId || versions[versions.length - 1]?.id || "";
-  const effectiveRightVersionId = rightVersionId || versions[0]?.id || "";
-
-  const leftVersion = useMemo(
-    () =>
-      versions.find((version) => version.id === effectiveLeftVersionId) ??
-      versions[versions.length - 1],
-    [effectiveLeftVersionId, versions],
-  );
-  const rightVersion = useMemo(
-    () =>
-      versions.find((version) => version.id === effectiveRightVersionId) ??
-      versions[0],
-    [effectiveRightVersionId, versions],
-  );
-  const diffLines = useMemo(
-    () =>
-      buildLineDiff(leftVersion?.content ?? "", rightVersion?.content ?? ""),
-    [leftVersion?.content, rightVersion?.content],
-  );
-  const diffStats = useMemo(() => getDiffStats(diffLines), [diffLines]);
-
-  async function onSaveDraft(event: SubmitEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!document) {
-      return;
-    }
-
-    setPendingSave("draft");
-    setError(null);
-
-    try {
-      const updatedDocument = await updateDocument(document.id, {
-        currentContent: contentDraft,
-      });
-      setDocument(updatedDocument);
-    } catch (saveError: unknown) {
-      setError(
-        saveError instanceof Error
-          ? saveError.message
-          : "Unable to save document",
-      );
-    } finally {
-      setPendingSave(null);
-    }
+  if (loading) {
+    return <p className="muted">Loading document...</p>;
   }
 
-  async function onCreateSnapshot(event: SubmitEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!document || !snapshotName) {
-      return;
-    }
-
-    setPendingSave("snapshot");
-    setError(null);
-
-    try {
-      const createdVersion = await createDocumentVersion({
-        documentId: document.id,
-        versionName: snapshotName,
-        content: contentDraft,
-      });
-      setDocument((current) =>
-        current
-          ? {
-              ...current,
-              currentContent: contentDraft,
-            }
-          : current,
-      );
-      setVersions((current) => [createdVersion, ...current]);
-      setRightVersionId(createdVersion.id);
-      setSnapshotName(`${snapshotName} v2`);
-    } catch (snapshotError: unknown) {
-      setError(
-        snapshotError instanceof Error
-          ? snapshotError.message
-          : "Unable to create snapshot",
-      );
-    } finally {
-      setPendingSave(null);
-    }
+  if (error) {
+    return <p className="error">{error}</p>;
   }
 
+  if (!bundle) {
+    return <p className="muted">Document not found.</p>;
+  }
   return (
     <section className="stack-lg">
       <PageHeader
         eyebrow="Document detail"
-        title={document?.title ?? "Document detail"}
-        description={
-          document
-            ? "Edit the current draft, save named snapshots, and compare versions with the live diff viewer."
-            : "Choose a workspace document to inspect versions and compare changes."
-        }
-        actions={
-          <div className="row gap-sm wrap">
-            <Link className="button-link button-link-secondary" to="/documents">
-              All documents
-            </Link>
-          </div>
-        }
+        title={bundle.document.title}
+        description="Embedded preview and version history."
       />
 
-      {error ? <p className="error">{error}</p> : null}
-      {loading ? <p className="muted">Loading document...</p> : null}
-
-      {document ? (
-        <>
-          <div className="two-column">
-            <form className="panel stack" onSubmit={onSaveDraft}>
-              <div className="row space-between wrap">
-                <h2>Current draft</h2>
-                <StatusPill
-                  tone={
-                    document.visibility === "workspace" ? "accent" : "warning"
-                  }
-                >
-                  {document.visibility}
-                </StatusPill>
-              </div>
-              <div className="meta-grid">
-                <span>Owner: {document.owner}</span>
-                <span>
-                  Updated: {new Date(document.updated).toLocaleString()}
-                </span>
-              </div>
-              <label className="field">
-                <span>Document content</span>
-                <textarea
-                  className="textarea textarea-large"
-                  value={contentDraft}
-                  onChange={(event) => setContentDraft(event.target.value)}
-                />
-              </label>
-              <button type="submit" disabled={pendingSave === "draft"}>
-                {pendingSave === "draft" ? "Saving..." : "Save draft"}
-              </button>
-            </form>
-
-            <form className="panel stack" onSubmit={onCreateSnapshot}>
-              <div className="row space-between wrap">
-                <h2>Snapshot history</h2>
-                <StatusPill tone="accent">{versions.length} saved</StatusPill>
-              </div>
-              <label className="field">
-                <span>Snapshot name</span>
-                <input
-                  value={snapshotName}
-                  onChange={(event) => setSnapshotName(event.target.value)}
-                  placeholder="Stakeholder edits"
-                  required
-                />
-              </label>
-              <button type="submit" disabled={pendingSave === "snapshot"}>
-                {pendingSave === "snapshot" ? "Saving..." : "Save snapshot"}
-              </button>
-
-              <div className="panel-list">
-                {versions.map((version) => (
-                  <article key={version.id} className="timeline-item">
-                    <div className="row space-between wrap gap-sm">
-                      <strong>{versionLabel(version)}</strong>
-                      <span className="muted">
-                        {new Date(version.created).toLocaleString()}
-                      </span>
-                    </div>
-                    <p className="muted">Author: {version.author}</p>
-                  </article>
-                ))}
-              </div>
-            </form>
+      {window.location.hostname === "localhost" && bundle.document.file && (
+        <div style={{ padding: "1rem", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", fontSize: "0.875rem" }}>
+          <strong>Developer Debug:</strong>
+          <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.5rem", alignItems: "center" }}>
+            <code style={{ background: "#eee", padding: "0.2rem 0.4rem", borderRadius: "4px", flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>
+              {getRawFileUrl(bundle.document)}
+            </code>
+            <button
+              className="button-sm"
+              onClick={() => {
+                const url = getRawFileUrl(bundle.document);
+                if (url) navigator.clipboard.writeText(url);
+              }}
+            >
+              Copy File URL
+            </button>
           </div>
+          <p className="muted" style={{ marginTop: "0.5rem", fontSize: "0.75rem" }}>
+            Paste the File URL in a new tab. If it doesn't download the file, your tunnel or PocketBase permissions are not set correctly.
+          </p>
+        </div>
+      )}
 
-          <section className="panel stack">
-            <div className="row space-between wrap">
-              <h2>Diff viewer</h2>
-              <StatusPill tone="accent">Person 3 engine</StatusPill>
+      <div className="panel stack">
+        {getFilePreviewUrl(bundle.document) ? (
+          <iframe
+            src={getFilePreviewUrl(bundle.document)!}
+            width="100%"
+            height="800px"
+            frameBorder="0"
+            style={{ borderRadius: "12px", background: "#f1f5f9" }}
+            title="Document preview"
+          />
+        ) : (
+          <div className="stack">
+            {bundle.document.file &&
+              (bundle.document.file.toLowerCase().endsWith(".docx") ||
+                bundle.document.file.toLowerCase().endsWith(".docm") ||
+                bundle.document.file.toLowerCase().endsWith(".xlsx") ||
+                bundle.document.file.toLowerCase().endsWith(".xlsm") ||
+                bundle.document.file.toLowerCase().endsWith(".pptx") ||
+                bundle.document.file.toLowerCase().endsWith(".pptm")) && (
+                <div className="warning" style={{ padding: "0.75rem", borderRadius: "8px", background: "rgba(234, 179, 8, 0.1)", color: "#854d0e", fontSize: "0.875rem", marginBottom: "1rem" }}>
+                  <p>
+                    <strong>Localhost Preview Notice:</strong> Office Online Viewer is disabled because it cannot reach your local server.
+                  </p>
+                  <p style={{ marginTop: "0.5rem" }}>
+                    To enable high-fidelity preview on localhost:
+                  </p>
+                  <ol style={{ marginLeft: "1.5rem", marginTop: "0.25rem" }}>
+                    <li>Start a tunnel (e.g., <code>cloudflared tunnel --url http://localhost:8090</code>) to expose your PocketBase server.</li>
+                    <li>Set <code>VITE_PUBLIC_POCKETBASE_URL</code> in your <code>.env</code> file to the tunnel URL.</li>
+                    <li>Restart the development server.</li>
+                  </ol>
+                </div>
+              )}
+            <p className="muted">No preview available for this file type.</p>
+          </div>
+        )}
+      </div>
+
+      <div className="row space-between wrap">
+        <Link to="/documents">Back to documents</Link>
+        <StatusPill tone={bundle.document.visibility === "workspace" ? "accent" : "warning"}>
+          {bundle.document.visibility}
+        </StatusPill>
+      </div>
+
+      <div className="stack-lg">
+        <div className="panel stack">
+          <h3>Linked Tasks</h3>
+          {bundle.linkedTasks.length > 0 ? (
+            <div className="list stack-sm">
+              {bundle.linkedTasks.map((task: any) => (
+                <Link key={task.id} to="/tasks" className="list-row panel-sm no-underline">
+                  <div className="stack-xs">
+                    <strong>{task.title}</strong>
+                    <p className="muted small">{task.status}</p>
+                  </div>
+                  <span>→</span>
+                </Link>
+              ))}
             </div>
+          ) : (
+            <p className="muted">No tasks linked to this document.</p>
+          )}
+        </div>
 
-            <div className="diff-stats">
-              <div className="stat-card stat-card-compact">
-                <span className="stat-value">{diffStats.added}</span>
-                <p>Added lines</p>
-              </div>
-              <div className="stat-card stat-card-compact">
-                <span className="stat-value">{diffStats.removed}</span>
-                <p>Removed lines</p>
-              </div>
-              <div className="stat-card stat-card-compact">
-                <span className="stat-value">{diffStats.unchanged}</span>
-                <p>Unchanged lines</p>
-              </div>
-            </div>
-
-            <div className="selector-grid">
-              <label className="field">
-                <span>Compare from</span>
-                <select
-                  value={effectiveLeftVersionId}
-                  onChange={(event) => setLeftVersionId(event.target.value)}
-                  disabled={!versions.length}
-                >
-                  {versions.map((version) => (
-                    <option key={version.id} value={version.id}>
-                      {versionLabel(version)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="field">
-                <span>Compare to</span>
-                <select
-                  value={effectiveRightVersionId}
-                  onChange={(event) => setRightVersionId(event.target.value)}
-                  disabled={!versions.length}
-                >
-                  {versions.map((version) => (
-                    <option key={version.id} value={version.id}>
-                      {versionLabel(version)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            <div className="diff-legend">
-              <span className="legend-chip legend-chip-added">Added</span>
-              <span className="legend-chip legend-chip-removed">Removed</span>
-              <span className="legend-chip legend-chip-neutral">Unchanged</span>
-            </div>
-
-            <div className="diff-list" aria-label="Version diff">
-              {diffLines.map((line, index) => (
-                <div
-                  key={`${line.kind}-${line.leftLineNumber ?? "x"}-${line.rightLineNumber ?? "x"}-${index}`}
-                  className={`diff-line diff-line-${line.kind}`}
-                >
-                  <span className="diff-line-number">
-                    {line.leftLineNumber ?? ""}
-                  </span>
-                  <span className="diff-line-number">
-                    {line.rightLineNumber ?? ""}
-                  </span>
-                  <code className="diff-line-code">{line.value || " "}</code>
+        <div className="panel stack">
+          <h3>Version History</h3>
+          {bundle.versions.length > 0 ? (
+            <div className="list stack-sm">
+              {bundle.versions.map((version: any) => (
+                <div key={version.id} className="list-row panel-sm">
+                  <div className="stack-xs">
+                    <strong>{version.versionName}</strong>
+                    <p className="muted small">
+                      By {version.expand?.author?.name || "Unknown"} on {new Date(version.created).toLocaleString()}
+                    </p>
+                  </div>
                 </div>
               ))}
             </div>
-          </section>
-        </>
-      ) : null}
+          ) : (
+            <p className="muted">No version history available.</p>
+          )}
+        </div>
+      </div>
     </section>
   );
 }
