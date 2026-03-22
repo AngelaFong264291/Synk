@@ -15,6 +15,23 @@ $app.store().set("synk_vc", {
 
   getMembership: function (app, workspaceId, userId) {
     try {
+      var team = app.findRecordById("teams", workspaceId);
+      if (team && team.get("owner") === userId) {
+        return team;
+      }
+    } catch (err) {
+      // Not a team id, or record missing — try membership tables.
+    }
+    try {
+      return app.findFirstRecordByFilter(
+        "team_members",
+        "team = {:w} && user = {:u}",
+        { w: workspaceId, u: userId },
+      );
+    } catch (err) {
+      // no row
+    }
+    try {
       return app.findFirstRecordByFilter(
         "workspace_members",
         "workspace = {:w} && user = {:u}",

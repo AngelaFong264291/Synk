@@ -1,5 +1,5 @@
 import { ClientResponseError } from "pocketbase";
-import { normalizeAuthEmail, pb } from "./pocketbase";
+import { normalizeAuthEmail, pb, pocketBaseErrorMessage } from "./pocketbase";
 import { collections } from "./types";
 import type {
   DashboardSnapshot,
@@ -232,6 +232,60 @@ function normalizeInviteCode(code: string) {
   return code.trim().toUpperCase();
 }
 
+function generateInviteCode(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  let out = "";
+  for (let i = 0; i < 8; i++) {
+    out += alphabet[bytes[i]! % alphabet.length];
+  }
+  return out;
+}
+
+function resolveInviteCodeForCreate(inviteCode: string) {
+  const normalized = normalizeInviteCode(inviteCode);
+  if (normalized.length > 0) {
+    return normalized;
+  }
+  return generateInviteCode();
+}
+
+function mapTeamsCreateError(error: unknown): Error {
+  if (error instanceof ClientResponseError && error.response?.data) {
+    const data = error.response.data as Record<string, unknown>;
+    for (const key of ["code", "inviteCode"] as const) {
+      const field = data[key];
+      if (
+        field &&
+        typeof field === "object" &&
+        "message" in field &&
+        typeof (field as { message: string }).message === "string"
+      ) {
+        const m = (field as { message: string }).message.toLowerCase();
+        if (m.includes("unique") || m.includes("duplicate")) {
+          return new Error(
+            "That invite code is already in use. Choose a different code.",
+          );
+        }
+      }
+    }
+  }
+  if (error instanceof ClientResponseError && error.status === 400) {
+    const msg = pocketBaseErrorMessage(error).toLowerCase();
+    if (
+      msg.includes("unique") ||
+      msg.includes("idx_teams_code") ||
+      msg.includes("duplicate")
+    ) {
+      return new Error(
+        "That invite code is already in use. Choose a different code.",
+      );
+    }
+  }
+  return new Error(pocketBaseErrorMessage(error));
+}
+
 function dedupeWorkspaces(workspaces: WorkspaceRecord[]) {
   return [
     ...new Map(
@@ -261,6 +315,10 @@ function isMissingCollectionError(error: unknown) {
  */
 function isUnusableLegacyWorkspacesTableError(error: unknown) {
   return error instanceof ClientResponseError && error.status === 400;
+}
+
+function isRecordNotFoundError(error: unknown) {
+  return error instanceof ClientResponseError && error.status === 404;
 }
 
 async function getWorkspaceByInviteCode(inviteCode: string) {
@@ -311,21 +369,6 @@ async function recoverWorkspaceAfterCreateFailure(
   }
 
   return null;
-}
-
-async function getOwnedTeam(workspaceId: string, userId: string) {
-  try {
-    const team = await pb
-      .collection(collections.teams)
-      .getOne<WorkspaceRecord>(workspaceId);
-    return team.owner === userId ? team : null;
-  } catch (error: unknown) {
-    if (!isMissingCollectionError(error)) {
-      throw error;
-    }
-
-    return null;
-  }
 }
 
 async function getOwnedWorkspace(workspaceId: string, userId: string) {
@@ -379,21 +422,40 @@ function getMembershipWorkspace(membership: WorkspaceMemberWithExpand) {
 async function getWorkspaceMembership(workspaceId: string, userId?: string) {
   const currentUser = userId ? null : requireCurrentUser();
   const currentUserId = userId ?? currentUser!.id;
-  const ownedTeam = await getOwnedTeam(workspaceId, currentUserId);
-  const ownedWorkspace = await getOwnedWorkspace(workspaceId, currentUserId);
 
-  if (ownedTeam && ownedTeam.owner === currentUserId) {
-    return createOwnerMembership(
-      ownedTeam,
-      currentUser ?? (await getUserById(currentUserId)),
-    );
+  /**
+   * After `use_teams_as_backend`, active workspace ids are `teams` row ids.
+   * Never call legacy `workspaces.getOne` with a team id: that collection may
+   * still exist but have broken rules (e.g. missing `workspace_members` back-relation).
+   */
+  let team: WorkspaceRecord | null = null;
+  try {
+    team = await pb
+      .collection(collections.teams)
+      .getOne<WorkspaceRecord>(workspaceId);
+  } catch (error: unknown) {
+    if (isMissingCollectionError(error) || isRecordNotFoundError(error)) {
+      team = null;
+    } else {
+      throw error;
+    }
   }
 
-  if (ownedWorkspace && ownedWorkspace.owner === currentUserId) {
-    return createOwnerMembership(
-      ownedWorkspace,
-      currentUser ?? (await getUserById(currentUserId)),
-    );
+  if (team) {
+    if (team.owner === currentUserId) {
+      return createOwnerMembership(
+        team,
+        currentUser ?? (await getUserById(currentUserId)),
+      );
+    }
+  } else {
+    const ownedWorkspace = await getOwnedWorkspace(workspaceId, currentUserId);
+    if (ownedWorkspace && ownedWorkspace.owner === currentUserId) {
+      return createOwnerMembership(
+        ownedWorkspace,
+        currentUser ?? (await getUserById(currentUserId)),
+      );
+    }
   }
 
   try {
@@ -518,13 +580,17 @@ export async function listMyWorkspaces() {
 
 export async function createWorkspace(input: CreateWorkspaceInput) {
   const user = requireCurrentUser();
-  const normalizedCode = normalizeInviteCode(input.inviteCode);
+  const trimmedName = input.name.trim();
+  if (!trimmedName) {
+    throw new Error("Workspace name is required.");
+  }
+  const normalizedCode = resolveInviteCodeForCreate(input.inviteCode);
 
   try {
     const workspace = await pb
       .collection(collections.teams)
       .create<WorkspaceRecord>({
-        name: input.name,
+        name: trimmedName,
         owner: user.id,
         code: normalizedCode,
       });
@@ -539,6 +605,7 @@ export async function createWorkspace(input: CreateWorkspaceInput) {
     const recovered = await recoverWorkspaceAfterCreateFailure(
       {
         ...input,
+        name: trimmedName,
         inviteCode: normalizedCode,
       },
       user.id,
@@ -549,7 +616,7 @@ export async function createWorkspace(input: CreateWorkspaceInput) {
     }
 
     if (!isMissingCollectionError(error)) {
-      throw error;
+      throw mapTeamsCreateError(error);
     }
   }
 
@@ -559,7 +626,7 @@ export async function createWorkspace(input: CreateWorkspaceInput) {
     workspace = await pb
       .collection(collections.workspaces)
       .create<WorkspaceRecord>({
-        name: input.name,
+        name: trimmedName,
         description: input.description,
         owner: user.id,
         inviteCode: normalizedCode,
@@ -568,6 +635,7 @@ export async function createWorkspace(input: CreateWorkspaceInput) {
     const recovered = await recoverWorkspaceAfterCreateFailure(
       {
         ...input,
+        name: trimmedName,
         inviteCode: normalizedCode,
       },
       user.id,
@@ -577,7 +645,7 @@ export async function createWorkspace(input: CreateWorkspaceInput) {
       return recovered;
     }
 
-    throw error;
+    throw mapTeamsCreateError(error);
   }
 
   try {
