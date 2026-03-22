@@ -120,7 +120,10 @@ function inferTaskPriority(task: TaskRecordWithExpand): Task["priority"] {
   return "Medium";
 }
 
-function mapWorkspace(workspace: WorkspaceRecord, memberCount: number): Workspace {
+function mapWorkspace(
+  workspace: WorkspaceRecord,
+  memberCount: number,
+): Workspace {
   return {
     id: workspace.id,
     name: workspace.name,
@@ -220,9 +223,12 @@ export async function loadDashboardViewModel(
     const members = mapMembers(bundle.members);
     const documents = bundle.documents.map((document) => {
       const versionGroup =
-        bundle.versionsByDocument.find((entry) => entry.documentId === document.id)
-          ?.versions ?? [];
-      const linkedTasks = bundle.tasks.filter((task) => task.document === document.id);
+        bundle.versionsByDocument.find(
+          (entry) => entry.documentId === document.id,
+        )?.versions ?? [];
+      const linkedTasks = bundle.tasks.filter(
+        (task) => task.document === document.id,
+      );
 
       return mapDocument(document, versionGroup, linkedTasks);
     });
@@ -256,7 +262,11 @@ export async function loadDocumentDetailViewModel(
 ): Promise<DocumentDetailViewModel> {
   try {
     const bundle = await getDocumentBundle(documentId);
-    const document = mapDocument(bundle.document, bundle.versions, bundle.linkedTasks);
+    const document = mapDocument(
+      bundle.document,
+      bundle.versions,
+      bundle.linkedTasks,
+    );
 
     return {
       source: "live",

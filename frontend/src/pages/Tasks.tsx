@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type SubmitEvent } from "react";
 import {
   createTask,
   listWorkspaceDocuments,
@@ -46,12 +46,18 @@ function getAssigneeLabel(
   return member ? getMemberLabel(member) : assigneeId;
 }
 
-function getDocumentTitle(documentId: string | undefined, documents: DocumentRecord[]) {
+function getDocumentTitle(
+  documentId: string | undefined,
+  documents: DocumentRecord[],
+) {
   if (!documentId) {
     return "No linked document";
   }
 
-  return documents.find((document) => document.id === documentId)?.title ?? documentId;
+  return (
+    documents.find((document) => document.id === documentId)?.title ??
+    documentId
+  );
 }
 
 export function Tasks() {
@@ -99,7 +105,9 @@ export function Tasks() {
       } catch (loadError: unknown) {
         if (!cancelled) {
           setError(
-            loadError instanceof Error ? loadError.message : "Unable to load tasks",
+            loadError instanceof Error
+              ? loadError.message
+              : "Unable to load tasks",
           );
         }
       } finally {
@@ -125,7 +133,7 @@ export function Tasks() {
     [tasks],
   );
 
-  async function onCreateTask(event: FormEvent) {
+  async function onCreateTask(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!activeWorkspace) {
@@ -151,7 +159,9 @@ export function Tasks() {
       setDueDate("");
     } catch (createError: unknown) {
       setError(
-        createError instanceof Error ? createError.message : "Unable to create task",
+        createError instanceof Error
+          ? createError.message
+          : "Unable to create task",
       );
     } finally {
       setPendingCreate(false);

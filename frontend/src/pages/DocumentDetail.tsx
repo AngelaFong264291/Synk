@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type SubmitEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   createDocumentVersion,
@@ -26,7 +26,9 @@ export function DocumentDetail() {
   const [snapshotName, setSnapshotName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pendingSave, setPendingSave] = useState<"draft" | "snapshot" | null>(null);
+  const [pendingSave, setPendingSave] = useState<"draft" | "snapshot" | null>(
+    null,
+  );
 
   useEffect(() => {
     if (!activeWorkspace || !documentId) {
@@ -63,7 +65,9 @@ export function DocumentDetail() {
         setLeftVersionId("");
         setRightVersionId("");
         setContentDraft(nextDocument?.currentContent ?? "");
-        setSnapshotName(nextVersions[0] ? `${versionLabel(nextVersions[0])} follow-up` : "");
+        setSnapshotName(
+          nextVersions[0] ? `${versionLabel(nextVersions[0])} follow-up` : "",
+        );
       } catch (loadError: unknown) {
         if (!cancelled) {
           setError(
@@ -88,7 +92,8 @@ export function DocumentDetail() {
 
   const [leftVersionId, setLeftVersionId] = useState("");
   const [rightVersionId, setRightVersionId] = useState("");
-  const effectiveLeftVersionId = leftVersionId || versions[versions.length - 1]?.id || "";
+  const effectiveLeftVersionId =
+    leftVersionId || versions[versions.length - 1]?.id || "";
   const effectiveRightVersionId = rightVersionId || versions[0]?.id || "";
 
   const leftVersion = useMemo(
@@ -104,12 +109,13 @@ export function DocumentDetail() {
     [effectiveRightVersionId, versions],
   );
   const diffLines = useMemo(
-    () => buildLineDiff(leftVersion?.content ?? "", rightVersion?.content ?? ""),
+    () =>
+      buildLineDiff(leftVersion?.content ?? "", rightVersion?.content ?? ""),
     [leftVersion?.content, rightVersion?.content],
   );
   const diffStats = useMemo(() => getDiffStats(diffLines), [diffLines]);
 
-  async function onSaveDraft(event: FormEvent) {
+  async function onSaveDraft(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!document) {
@@ -126,14 +132,16 @@ export function DocumentDetail() {
       setDocument(updatedDocument);
     } catch (saveError: unknown) {
       setError(
-        saveError instanceof Error ? saveError.message : "Unable to save document",
+        saveError instanceof Error
+          ? saveError.message
+          : "Unable to save document",
       );
     } finally {
       setPendingSave(null);
     }
   }
 
-  async function onCreateSnapshot(event: FormEvent) {
+  async function onCreateSnapshot(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!document || !snapshotName) {
@@ -200,14 +208,18 @@ export function DocumentDetail() {
               <div className="row space-between wrap">
                 <h2>Current draft</h2>
                 <StatusPill
-                  tone={document.visibility === "workspace" ? "accent" : "warning"}
+                  tone={
+                    document.visibility === "workspace" ? "accent" : "warning"
+                  }
                 >
                   {document.visibility}
                 </StatusPill>
               </div>
               <div className="meta-grid">
                 <span>Owner: {document.owner}</span>
-                <span>Updated: {new Date(document.updated).toLocaleString()}</span>
+                <span>
+                  Updated: {new Date(document.updated).toLocaleString()}
+                </span>
               </div>
               <label className="field">
                 <span>Document content</span>

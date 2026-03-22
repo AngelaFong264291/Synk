@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type SubmitEvent } from "react";
 import {
   createDecision,
   listWorkspaceDecisions,
@@ -86,7 +86,7 @@ export function Decisions() {
     };
   }, [activeWorkspace]);
 
-  async function onCreateDecision(event: FormEvent) {
+  async function onCreateDecision(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!activeWorkspace) {
