@@ -6,41 +6,105 @@ export function Home() {
   const { isAuthenticated } = useAuth();
 
   return (
-    <section className="stack-xl">
-      <div className="landing-hero">
-        <div className="stack">
-          <p className="eyebrow">Hackathon collaboration OS</p>
-          <h1>
-            Synk gives your workspace one place to track changes and ownership.
-          </h1>
-          <p className="hero-copy">
-            Build the demo around a single shared workspace instead of chasing
-            updates across docs, chats, and task lists.
+    <section className="stack-xl marketing-page">
+      <section className="marketing-hero">
+        <div className="marketing-hero-copy">
+          <p className="eyebrow">Collaboration clarity for fast-moving teams</p>
+          <h1>Keep docs, ownership, and momentum in one polished workspace.</h1>
+          <p className="marketing-copy">
+            Synk helps product, design, and execution stay aligned without
+            forcing your team into heavyweight project software. Everyone sees
+            what changed, who owns it, and what happens next.
           </p>
-          <div className="row gap-sm wrap">
+          <div className="marketing-actions">
             <Link
               className="button-link"
-              to={isAuthenticated ? "/dashboard" : "/login"}
+              to={isAuthenticated ? "/dashboard" : "/register"}
             >
-              Open workspace
+              Start with Synk
             </Link>
             <Link className="button-link button-link-secondary" to="/about">
-              See MVP scope
+              Why teams choose it
             </Link>
+          </div>
+          <div className="marketing-proof-row">
+            <div className="marketing-proof-chip">
+              <strong>{members.length} collaborators</strong>
+              <span>working from one shared source of truth</span>
+            </div>
+            <div className="marketing-proof-chip">
+              <strong>{tasks.length} active tasks</strong>
+              <span>visible with ownership and momentum</span>
+            </div>
           </div>
         </div>
 
-        <aside className="hero-side panel">
-          <p className="eyebrow">Live demo frame</p>
+        <aside className="marketing-hero-card">
+          <div className="marketing-hero-card-top">
+            <p className="eyebrow">Live workspace</p>
+            <span className="marketing-live-pill">In motion</span>
+          </div>
           <h2>{workspace.name}</h2>
-          <p>{workspace.milestone}</p>
-          <div className="meta-grid">
-            <span>{members.length} workspace members</span>
-            <span>{tasks.length} active tasks</span>
-            <span>Invite code {workspace.inviteCode}</span>
+          <p className="marketing-hero-card-text">{workspace.milestone}</p>
+          <div className="marketing-card-stat-grid">
+            <article>
+              <strong>{members.length}</strong>
+              <span>members aligned</span>
+            </article>
+            <article>
+              <strong>{tasks.length}</strong>
+              <span>tasks actively tracked</span>
+            </article>
+            <article>
+              <strong>{workspace.inviteCode}</strong>
+              <span>invite code ready</span>
+            </article>
+          </div>
+          <div className="marketing-hero-card-rail">
+            <div className="marketing-rail-item">
+              <span className="marketing-rail-dot" />
+              <div>
+                <strong>Shared document history</strong>
+                <p>Keep progress anchored to the latest working context.</p>
+              </div>
+            </div>
+            <div className="marketing-rail-item">
+              <span className="marketing-rail-dot marketing-rail-dot-alt" />
+              <div>
+                <strong>Cleaner handoffs</strong>
+                <p>Let the next owner pick up work without guessing.</p>
+              </div>
+            </div>
           </div>
         </aside>
-      </div>
+      </section>
+
+      <section className="marketing-value-grid">
+        <article className="marketing-value-card">
+          <p className="eyebrow">Visibility</p>
+          <h2>See the current state instantly</h2>
+          <p>
+            Documents, workspace activity, and task status are grouped together
+            so your team can orient quickly without opening five tools.
+          </p>
+        </article>
+        <article className="marketing-value-card">
+          <p className="eyebrow">Ownership</p>
+          <h2>Make accountability lightweight</h2>
+          <p>
+            Assign work, watch progress move, and keep delivery visible without
+            turning your process into bureaucracy.
+          </p>
+        </article>
+        <article className="marketing-value-card">
+          <p className="eyebrow">Momentum</p>
+          <h2>Reduce the drag between idea and execution</h2>
+          <p>
+            Synk gives teams one place to coordinate next steps, keep docs
+            current, and move work forward with confidence.
+          </p>
+        </article>
+      </section>
     </section>
   );
 }
