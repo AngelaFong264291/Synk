@@ -87,7 +87,7 @@ function formatDateTime(value?: string) {
 
 function displayName(user?: UserRecord | null) {
   if (!user) {
-    return "Unknown teammate";
+    return "Unknown workspace member";
   }
 
   return user.name?.trim() || user.email;
@@ -128,7 +128,7 @@ function mapWorkspace(
   return {
     id: workspace.id,
     name: workspace.name,
-    inviteCode: workspace.inviteCode,
+    inviteCode: workspace.inviteCode ?? workspace.code ?? "",
     focus: "Hackathon MVP",
     milestone: `${memberCount} collaborator${memberCount === 1 ? "" : "s"} active`,
   };
@@ -141,7 +141,7 @@ function mapMembers(members: WorkspaceMemberWithExpand[]): Member[] {
     return {
       id: member.id,
       name,
-      role: titleCase(member.role),
+      role: titleCase(member.role ?? "member"),
       initials: initials(name),
     };
   });
@@ -196,7 +196,7 @@ function mapTask(task: TaskRecordWithExpand): Task {
     assignee: displayName(task.expand?.assignee),
     dueDate: task.dueDate ? formatDate(task.dueDate) : "Unscheduled",
     status: statusMap[task.status],
-    linkedDocument: task.expand?.document?.title ?? "General workspace",
+    linkedDocument: task.expand?.document?.title ?? "General workspace task",
     priority: inferTaskPriority(task),
   };
 }

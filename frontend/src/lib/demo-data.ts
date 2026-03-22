@@ -90,7 +90,7 @@ export const documents: Document[] = [
         createdAt: "Mar 21, 9:10 AM",
         summary: "Initial outline for the hackathon flow.",
         content:
-          "Goal: show one place where teams track changes, tasks, and decisions.\nFlow: sign in, open workspace, create document, save version, create task, log decision.",
+          "Goal: show one place where workspaces track changes, tasks, and decisions.\nFlow: sign in, open workspace, create document, save version, create task, log decision.",
       },
       {
         id: "v2",
@@ -99,7 +99,7 @@ export const documents: Document[] = [
         createdAt: "Mar 21, 1:45 PM",
         summary: "Expanded the story with ownership and summary moments.",
         content:
-          "Goal: show one place where teams track changes, tasks, and decisions.\nFlow: sign in, join workspace, create document, save named version, compare diff, create task, log decision, show dashboard summary.\nSuccess: every teammate can explain who changed what and why.",
+          "Goal: show one place where workspaces track changes, tasks, and decisions.\nFlow: sign in, join workspace, create document, save named version, compare diff, create task, log decision, show dashboard summary.\nSuccess: every workspace member can explain who changed what and why.",
       },
     ],
   },
@@ -121,7 +121,7 @@ export const documents: Document[] = [
         createdAt: "Mar 21, 11:20 AM",
         summary: "Rough bullets for problem and market.",
         content:
-          "Problem: teams lose context.\nSolution: Synk creates one shared audit trail.\nProof: show tasks, versions, and decisions in one place.",
+          "Problem: workspaces lose context.\nSolution: Synk creates one shared audit trail.\nProof: show tasks, versions, and decisions in one place.",
       },
     ],
   },

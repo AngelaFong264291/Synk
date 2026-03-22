@@ -3,7 +3,7 @@ export function About() {
     <section className="stack-lg">
       <h1>About Synk</h1>
       <p>
-        Synk is a collaboration workspace for teams who need lightweight
+        Synk is a collaboration hub for groups who need lightweight
         accountability without developer-only tooling. This frontend focuses on
         the hackathon MVP: workspaces, documents, snapshots, tasks, and
         decisions.

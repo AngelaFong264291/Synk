@@ -133,10 +133,10 @@ export function createDashboardSummary(
   return {
     headline: `${input.workspace.name} has ${openTasks.length} open tasks, ${snapshots.length} named snapshots, and ${input.decisions.length} decisions recorded for the demo.`,
     narrative: [
-      `${input.workspace.focus} is staying on track because the team can point to concrete version history, not just chat updates.`,
+      `${input.workspace.focus} is staying on track because the workspace can point to concrete version history, not just chat updates.`,
       overdueTasks.length
         ? `${overdueTasks.length} task${overdueTasks.length === 1 ? "" : "s"} need same-day attention before rehearsal.`
-        : "No same-day tasks are blocked right now, so the team can focus on demo polish.",
+        : "No same-day tasks are blocked right now, so the workspace can focus on demo polish.",
       "The strongest story for judges is the handoff from document changes to task ownership to final decision log.",
     ],
     recentActivity: createActivityFeed(input),

@@ -29,9 +29,7 @@ export function Register() {
         password,
         passwordConfirm,
       });
-      await pb
-        .collection("users")
-        .authWithPassword(normalizedEmail, password);
+      await pb.collection("users").authWithPassword(normalizedEmail, password);
       navigate("/dashboard", { replace: true });
     } catch (err: unknown) {
       setError(pocketBaseErrorMessage(err));

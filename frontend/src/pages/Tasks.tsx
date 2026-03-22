@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type SubmitEvent } from "react";
+import { useEffect, useState, type SubmitEvent } from "react";
 import {
   createTask,
   listWorkspaceDocuments,
@@ -28,6 +28,18 @@ function formatTaskStatus(status: TaskStatus) {
   }
 
   return "To Do";
+}
+
+function getColumnHint(status: TaskStatus) {
+  if (status === "in_progress") {
+    return "Items actively moving through the workflow";
+  }
+
+  if (status === "done") {
+    return "Completed work ready to reference in the demo";
+  }
+
+  return "Assigned work waiting for someone to pick it up";
 }
 
 function getMemberLabel(member: WorkspaceMemberWithExpand) {
@@ -60,6 +72,23 @@ function getDocumentTitle(
   );
 }
 
+function formatDueDate(value: string | undefined) {
+  if (!value) {
+    return "No due date";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return `Due ${value}`;
+  }
+
+  return `Due ${new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(date)}`;
+}
+
 export function Tasks() {
   const { activeWorkspace } = useActiveWorkspace();
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
@@ -73,6 +102,11 @@ export function Tasks() {
   const [selectedDocument, setSelectedDocument] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [pendingCreate, setPendingCreate] = useState(false);
+  const assignedTaskCount = tasks.filter((task) =>
+    Boolean(task.assignee),
+  ).length;
+  const linkedTaskCount = tasks.filter((task) => Boolean(task.document)).length;
+  const dueTaskCount = tasks.filter((task) => Boolean(task.dueDate)).length;
 
   useEffect(() => {
     if (!activeWorkspace) {
@@ -123,15 +157,6 @@ export function Tasks() {
       cancelled = true;
     };
   }, [activeWorkspace]);
-
-  const groupedTasks = useMemo(
-    () =>
-      columns.map((status) => ({
-        status,
-        tasks: tasks.filter((task) => task.status === status),
-      })),
-    [tasks],
-  );
 
   async function onCreateTask(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -190,7 +215,7 @@ export function Tasks() {
         title="Task board"
         description={
           activeWorkspace
-            ? `Showing live tasks for ${activeWorkspace.name}. Move items between columns as your team progresses.`
+            ? `Showing live tasks for ${activeWorkspace.name}. Keep work visible with clear To Do, In Progress, and Done status buckets.`
             : "Pick a workspace first so the board has real tasks to show."
         }
       />
@@ -264,78 +289,168 @@ export function Tasks() {
           </button>
         </form>
 
-        <section className="panel stack">
+        <section className="panel stack task-side-panel">
           <div className="row space-between wrap">
-            <h2>Board status</h2>
+            <h2>Board pulse</h2>
             <StatusPill tone={activeWorkspace ? "success" : "warning"}>
               {activeWorkspace ? `${tasks.length} tasks` : "No workspace"}
             </StatusPill>
           </div>
-          <p>
-            Link tasks to documents so the team can show ownership directly next
-            to version history.
-          </p>
-          <p className="muted">
-            The move buttons below call the shared PocketBase API so status
-            changes become live demo interactions.
-          </p>
+
+          <div className="task-pulse-grid">
+            <article className="task-pulse-card">
+              <span className="task-pulse-label">Assigned</span>
+              <strong>{assignedTaskCount}</strong>
+              <p>{tasks.length - assignedTaskCount} still need an owner</p>
+            </article>
+            <article className="task-pulse-card">
+              <span className="task-pulse-label">Linked</span>
+              <strong>{linkedTaskCount}</strong>
+              <p>{tasks.length - linkedTaskCount} are still general tasks</p>
+            </article>
+            <article className="task-pulse-card">
+              <span className="task-pulse-label">Scheduled</span>
+              <strong>{dueTaskCount}</strong>
+              <p>{tasks.length - dueTaskCount} have no due date yet</p>
+            </article>
+          </div>
         </section>
       </div>
 
       {loading ? <p className="muted">Loading tasks...</p> : null}
 
-      <div className="board">
-        {groupedTasks.map((column) => (
-          <section key={column.status} className="board-column">
-            <div className="row space-between">
-              <h2>{formatTaskStatus(column.status)}</h2>
-              <StatusPill
-                tone={
-                  column.status === "done"
-                    ? "success"
-                    : column.status === "in_progress"
-                      ? "accent"
-                      : "neutral"
-                }
-              >
-                {column.tasks.length}
-              </StatusPill>
-            </div>
+      {activeWorkspace ? (
+        <section className="panel stack board-shell">
+          <div className="row space-between wrap">
+            <h2>Board by status</h2>
+            <StatusPill tone="accent">{tasks.length} total</StatusPill>
+          </div>
 
-            <div className="stack">
-              {column.tasks.map((task) => (
-                <article key={task.id} className="task-card">
-                  <div className="row space-between gap-sm wrap">
-                    <strong>{task.title}</strong>
-                    <StatusPill tone="neutral">
-                      {formatTaskStatus(task.status)}
-                    </StatusPill>
+          <p className="board-shell-note">
+            Track what is queued, what is moving, and what is ready to show in
+            the final walkthrough.
+          </p>
+
+          <div className="board board-polished">
+            {columns.map((column) => {
+              const columnTasks = tasks.filter(
+                (task) => task.status === column,
+              );
+
+              return (
+                <section
+                  key={column}
+                  className={`board-column board-column-${column.replace("_", "-")}`}
+                >
+                  <div className="board-column-top">
+                    <div className="row space-between wrap gap-sm">
+                      <div className="stack board-column-heading">
+                        <h3>{formatTaskStatus(column)}</h3>
+                      </div>
+                      <StatusPill
+                        tone={
+                          column === "done"
+                            ? "success"
+                            : column === "in_progress"
+                              ? "accent"
+                              : "neutral"
+                        }
+                      >
+                        {columnTasks.length}
+                      </StatusPill>
+                    </div>
+                    <p className="board-column-hint">{getColumnHint(column)}</p>
                   </div>
-                  <p>{getDocumentTitle(task.document, documents)}</p>
-                  <p className="muted">
-                    {getAssigneeLabel(task.assignee, members)}
-                    {task.dueDate ? ` • due ${task.dueDate}` : ""}
-                  </p>
-                  <div className="row gap-sm wrap">
-                    {columns
-                      .filter((status) => status !== task.status)
-                      .map((status) => (
-                        <button
-                          key={status}
-                          type="button"
-                          className="button-secondary"
-                          onClick={() => void onMoveTask(task.id, status)}
-                        >
-                          Move to {formatTaskStatus(status)}
-                        </button>
-                      ))}
+
+                  <div className="stack board-column-body">
+                    {columnTasks.map((task) => (
+                      <article
+                        key={task.id}
+                        className="task-card task-card-polished"
+                      >
+                        <div className="row space-between gap-sm wrap task-card-top">
+                          <div className="stack task-card-copy">
+                            <strong>{task.title}</strong>
+                            <p>{getDocumentTitle(task.document, documents)}</p>
+                          </div>
+                          <StatusPill
+                            tone={
+                              task.status === "done"
+                                ? "success"
+                                : task.status === "in_progress"
+                                  ? "accent"
+                                  : "neutral"
+                            }
+                          >
+                            {formatTaskStatus(task.status)}
+                          </StatusPill>
+                        </div>
+
+                        <div className="task-card-meta">
+                          <div className="task-meta-pill">
+                            <span className="task-meta-label">Owner</span>
+                            <strong>
+                              {getAssigneeLabel(task.assignee, members)}
+                            </strong>
+                          </div>
+                          <div className="task-meta-pill">
+                            <span className="task-meta-label">Deadline</span>
+                            <strong>{formatDueDate(task.dueDate)}</strong>
+                          </div>
+                        </div>
+
+                        <div className="row gap-sm wrap task-card-actions">
+                          {task.status !== "todo" ? (
+                            <button
+                              type="button"
+                              className="button-secondary"
+                              onClick={() => void onMoveTask(task.id, "todo")}
+                            >
+                              Mark To Do
+                            </button>
+                          ) : null}
+                          {task.status !== "in_progress" ? (
+                            <button
+                              type="button"
+                              className="button-secondary"
+                              onClick={() =>
+                                void onMoveTask(task.id, "in_progress")
+                              }
+                            >
+                              Mark In Progress
+                            </button>
+                          ) : null}
+                          {task.status !== "done" ? (
+                            <button
+                              type="button"
+                              className="button-secondary"
+                              onClick={() => void onMoveTask(task.id, "done")}
+                            >
+                              Mark Done
+                            </button>
+                          ) : null}
+                        </div>
+                      </article>
+                    ))}
+
+                    {!columnTasks.length ? (
+                      <div className="board-empty-state">
+                        <div className="stack">
+                          <strong>No tasks yet</strong>
+                          <p className="muted">
+                            Nothing in {formatTaskStatus(column).toLowerCase()}{" "}
+                            yet.
+                          </p>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
-                </article>
-              ))}
-            </div>
-          </section>
-        ))}
-      </div>
+                </section>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
     </section>
   );
 }

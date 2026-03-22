@@ -1,5 +1,4 @@
 import { useEffect, useState, type SubmitEvent } from "react";
-import { Link } from "react-router-dom";
 import {
   listWorkspaceCommits,
   listWorkspaceMembers,
@@ -10,11 +9,23 @@ import type {
   WorkspaceCommitRecordWithExpand,
   WorkspaceMemberWithExpand,
 } from "../lib/types";
-import { PageHeader } from "../components/PageHeader";
 import { StatusPill } from "../components/StatusPill";
 
 function getMemberLabel(member: WorkspaceMemberWithExpand) {
   return member.expand?.user?.name || member.expand?.user?.email || member.user;
+}
+
+function getMemberRole(
+  member: WorkspaceMemberWithExpand,
+  activeWorkspaceOwnerId?: string,
+) {
+  if (member.role) {
+    return member.role;
+  }
+
+  return activeWorkspaceOwnerId && member.user === activeWorkspaceOwnerId
+    ? "owner"
+    : "member";
 }
 
 function getInitials(value: string) {
@@ -24,6 +35,21 @@ function getInitials(value: string) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
+}
+
+function getWorkspaceInviteCode(workspace: {
+  inviteCode?: string;
+  code?: string;
+}) {
+  return workspace.inviteCode ?? workspace.code ?? "";
+}
+
+function getFriendlyMembersError(message: string) {
+  if (message.toLowerCase().includes("requested resource wasn't found")) {
+    return "No workspace member records yet. You can still keep working while membership sync catches up.";
+  }
+
+  return message;
 }
 
 export function Workspace() {
@@ -45,15 +71,21 @@ export function Workspace() {
   const [commits, setCommits] = useState<WorkspaceCommitRecordWithExpand[]>([]);
   const [commitsLoading, setCommitsLoading] = useState(false);
   const [commitsError, setCommitsError] = useState<string | null>(null);
-  const [revertingCommitId, setRevertingCommitId] = useState<string | null>(null);
+  const [revertingCommitId, setRevertingCommitId] = useState<string | null>(
+    null,
+  );
 
   const [createName, setCreateName] = useState("");
-  const [createDescription, setCreateDescription] = useState("");
+  const [createInviteCode, setCreateInviteCode] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<"create" | "join" | null>(
     null,
   );
+  const workspaceCountLabel = `${workspaces.length} total`;
+  const memberCountLabel = activeWorkspace
+    ? `${members.length} member${members.length === 1 ? "" : "s"}`
+    : "0 total";
 
   useEffect(() => {
     if (!activeWorkspaceId) {
@@ -176,10 +208,12 @@ export function Workspace() {
     try {
       await createWorkspaceAndSelect({
         name: createName,
-        description: createDescription,
+        description: "",
+        inviteCode: createInviteCode,
       });
+      setActionError(null);
       setCreateName("");
-      setCreateDescription("");
+      setCreateInviteCode("");
     } catch (createError: unknown) {
       setActionError(
         createError instanceof Error
@@ -198,6 +232,7 @@ export function Workspace() {
 
     try {
       await joinWorkspaceAndSelect(inviteCode);
+      setActionError(null);
       setInviteCode("");
     } catch (joinError: unknown) {
       setActionError(
@@ -211,26 +246,58 @@ export function Workspace() {
   }
 
   return (
-    <section className="stack-lg">
-      <PageHeader
-        eyebrow="Workspace"
-        title={activeWorkspace?.name ?? "Your workspaces"}
-        description={
-          activeWorkspace
-            ? activeWorkspace.description ||
-              "Choose the workspace your team is actively demoing, then fan out into documents, tasks, and decisions."
-            : "Create a workspace or join one with an invite code so the rest of the product pages have a live data source."
-        }
-      />
+    <section className="stack-xl workspace-page">
+      <section className="workspace-hero">
+        <div className="workspace-hero-copy stack">
+          <p className="eyebrow">Workspaces</p>
+          <h1>Your Workspaces</h1>
+          <p className="workspace-hero-text">
+            Use this page for workspace management only: create a workspace,
+            join one, switch the active workspace, and check members or invite
+            code.
+          </p>
+        </div>
+        <div className="workspace-hero-illustration" aria-hidden="true">
+          <div className="workspace-cloud workspace-cloud-left" />
+          <div className="workspace-cloud workspace-cloud-right" />
+          <div className="workspace-illustration-card workspace-illustration-card-top">
+            <span className="workspace-illustration-dot" />
+            <div className="stack">
+              <strong>Workspace setup</strong>
+              <p>Create, switch, and invite from one place.</p>
+            </div>
+          </div>
+          <div className="workspace-illustration-card workspace-illustration-card-side">
+            <span className="workspace-illustration-dot workspace-illustration-dot-accent" />
+            <div className="stack">
+              <strong>Invite flow</strong>
+              <p>Bring collaborators in with one code.</p>
+            </div>
+          </div>
+          <div className="workspace-figure">
+            <div className="workspace-figure-head" />
+            <div className="workspace-figure-body" />
+            <div className="workspace-figure-laptop" />
+          </div>
+        </div>
+      </section>
 
       {error ? <p className="error">{error}</p> : null}
       {actionError ? <p className="error">{actionError}</p> : null}
 
-      <div className="two-column">
-        <section className="panel stack">
+      <div className="two-column workspace-summary-grid">
+        <section className="panel stack workspace-summary-card">
           <div className="row space-between wrap">
-            <h2>Workspace switcher</h2>
-            <StatusPill tone="accent">{workspaces.length} total</StatusPill>
+            <div className="row gap-sm">
+              <span
+                className="workspace-card-icon workspace-card-icon-workspace"
+                aria-hidden="true"
+              >
+                <span className="workspace-card-icon-grid" />
+              </span>
+              <h2>Workspace switcher</h2>
+            </div>
+            <StatusPill tone="accent">{workspaceCountLabel}</StatusPill>
           </div>
 
           {loading ? <p className="muted">Loading your workspaces...</p> : null}
@@ -256,33 +323,46 @@ export function Workspace() {
           )}
 
           {activeWorkspace ? (
-            <div className="hero-panel">
-              <div>
-                <p className="eyebrow">Invite code</p>
-                <h2>{activeWorkspace.inviteCode}</h2>
-                <p>{activeWorkspace.description || "No description yet"}</p>
+            <div className="workspace-highlight-card">
+              <div className="stack workspace-highlight-copy">
+                <p className="eyebrow">Active workspace</p>
+                <h3>{activeWorkspace.name}</h3>
+                <p className="workspace-invite-code">
+                  {getWorkspaceInviteCode(activeWorkspace)}
+                </p>
+                <p className="workspace-highlight-description">
+                  {activeWorkspace.description ||
+                    "No description yet. Use this space to coordinate documents, tasks, and decisions."}
+                </p>
               </div>
-              <div className="stack">
-                <Link className="button-link" to="/documents">
-                  Open documents
-                </Link>
-                <Link className="button-link button-link-secondary" to="/tasks">
-                  Open task board
-                </Link>
+              <div className="workspace-highlight-meta">
+                <span>{memberCountLabel}</span>
+                <span>Invite code ready</span>
               </div>
             </div>
           ) : null}
         </section>
 
-        <section className="panel stack">
+        <section className="panel stack workspace-summary-card">
           <div className="row space-between wrap">
-            <h2>Team members</h2>
+            <div className="row gap-sm">
+              <span
+                className="workspace-card-icon workspace-card-icon-team"
+                aria-hidden="true"
+              >
+                <span className="workspace-card-icon-person workspace-card-icon-person-back" />
+                <span className="workspace-card-icon-person workspace-card-icon-person-front" />
+              </span>
+              <h2>Workspace members</h2>
+            </div>
             <StatusPill tone={membersError ? "warning" : "success"}>
-              {membersLoading ? "Loading" : `${members.length} members`}
+              {membersLoading ? "Loading" : memberCountLabel}
             </StatusPill>
           </div>
 
-          {membersError ? <p className="error">{membersError}</p> : null}
+          {membersError ? (
+            <p className="error">{getFriendlyMembersError(membersError)}</p>
+          ) : null}
 
           {members.length ? (
             <div className="avatar-row">
@@ -293,16 +373,14 @@ export function Workspace() {
                     <span>{getInitials(label)}</span>
                     <div>
                       <strong>{label}</strong>
-                      <p>{member.role}</p>
+                      <p>{getMemberRole(member, activeWorkspace?.owner)}</p>
                     </div>
                   </div>
                 );
               })}
             </div>
           ) : (
-            <p className="muted">
-              Choose a workspace to see members and roles.
-            </p>
+            <p className="muted">Choose a workspace to see people and roles.</p>
           )}
         </section>
       </div>
@@ -359,27 +437,33 @@ export function Workspace() {
         </section>
       ) : null}
 
-      <div className="two-column">
-        <form className="panel stack" onSubmit={onCreateWorkspace}>
+      <div className="two-column workspace-form-grid">
+        <form
+          className="panel stack workspace-form-card"
+          onSubmit={onCreateWorkspace}
+        >
           <div className="row space-between wrap">
-            <h2>Create workspace</h2>
+            <h2>Create a new workspace</h2>
             <StatusPill tone="accent">Owner flow</StatusPill>
           </div>
           <label className="field">
-            <span>Name</span>
+            <span>Workspace name</span>
             <input
               value={createName}
               onChange={(event) => setCreateName(event.target.value)}
-              placeholder="Synk Demo"
+              placeholder="Workspace name"
               required
             />
           </label>
           <label className="field">
-            <span>Description</span>
+            <span>Invite code</span>
             <input
-              value={createDescription}
-              onChange={(event) => setCreateDescription(event.target.value)}
-              placeholder="Hackathon MVP workspace"
+              value={createInviteCode}
+              onChange={(event) =>
+                setCreateInviteCode(event.target.value.toUpperCase())
+              }
+              placeholder="PRODUHACK"
+              required
             />
           </label>
           <button type="submit" disabled={pendingAction === "create"}>
@@ -387,9 +471,12 @@ export function Workspace() {
           </button>
         </form>
 
-        <form className="panel stack" onSubmit={onJoinWorkspace}>
+        <form
+          className="panel stack workspace-form-card"
+          onSubmit={onJoinWorkspace}
+        >
           <div className="row space-between wrap">
-            <h2>Join workspace</h2>
+            <h2>Join a workspace</h2>
             <StatusPill tone="accent">Invite flow</StatusPill>
           </div>
           <label className="field">

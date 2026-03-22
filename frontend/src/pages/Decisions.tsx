@@ -177,7 +177,7 @@ export function Decisions() {
               className="textarea"
               value={decision}
               onChange={(event) => setDecision(event.target.value)}
-              placeholder="What the team decided..."
+              placeholder="What the workspace decided..."
               required
               disabled={!activeWorkspace}
             />

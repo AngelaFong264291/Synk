@@ -60,16 +60,13 @@ export function formatRecordDateTime(
 export function formatDocumentTimestamp(
   doc: { updated?: string; created?: string } | null | undefined,
 ): string {
-  return formatRecordDateTime(
-    pickFirstTimestamp(doc?.updated, doc?.created),
-  );
+  return formatRecordDateTime(pickFirstTimestamp(doc?.updated, doc?.created));
 }
 
 export function documentOwnerEmail(
   document: DocumentRecord | DocumentRecordWithExpand,
 ): string {
-  const ownerUser =
-    "expand" in document ? document.expand?.owner : undefined;
+  const ownerUser = "expand" in document ? document.expand?.owner : undefined;
   if (ownerUser?.email) {
     return ownerUser.email;
   }
@@ -86,8 +83,7 @@ export function documentOwnerEmail(
 export function versionAuthorEmail(
   version: DocumentVersionRecord | DocumentVersionRecordWithExpand,
 ): string {
-  const authorUser =
-    "expand" in version ? version.expand?.author : undefined;
+  const authorUser = "expand" in version ? version.expand?.author : undefined;
   if (authorUser?.email) {
     return authorUser.email;
   }
