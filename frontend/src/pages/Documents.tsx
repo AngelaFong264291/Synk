@@ -1,9 +1,24 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { createDocument, listWorkspaceDocuments } from "../lib/api";
+import { useAuth } from "../auth/useAuth";
+import { createDocument, listWorkspaceDocumentsWithExpand } from "../lib/api";
 import { useActiveWorkspace } from "../lib/useActiveWorkspace";
-import type { DocumentRecord } from "../lib/types";
+import type { DocumentRecordWithExpand } from "../lib/types";
 import { StatusPill } from "../components/StatusPill";
+
+function getDocumentOwnerEmail(
+  document: DocumentRecordWithExpand,
+  currentUser?: { id: string; email?: string } | null,
+) {
+  const expanded = document.expand?.owner?.email?.trim();
+  if (expanded) {
+    return expanded;
+  }
+  if (currentUser?.email && document.owner === currentUser.id) {
+    return currentUser.email;
+  }
+  return document.owner;
+}
 
 function getFileIcon(fileName?: string) {
   if (!fileName) return "📄";
@@ -31,8 +46,9 @@ function formatUpdatedAt(value: string) {
 }
 
 export function Documents() {
+  const { model } = useAuth();
   const { activeWorkspace } = useActiveWorkspace();
-  const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+  const [documents, setDocuments] = useState<DocumentRecordWithExpand[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingUpload, setPendingUpload] = useState(false);
@@ -52,7 +68,8 @@ export function Documents() {
       setError(null);
 
       try {
-        const nextDocuments = await listWorkspaceDocuments(workspaceId);
+        const nextDocuments =
+          await listWorkspaceDocumentsWithExpand(workspaceId);
         if (!cancelled) {
           setDocuments(nextDocuments);
         }
@@ -78,9 +95,7 @@ export function Documents() {
     };
   }, [activeWorkspace]);
 
-  async function onFileUpload(
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) {
+  async function onFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
 
@@ -131,7 +146,8 @@ export function Documents() {
     }
   }
 
-  const uniqueOwners = new Set(documents.map((document) => document.owner)).size;
+  const uniqueOwners = new Set(documents.map((document) => document.owner))
+    .size;
   const snapshotReadyCount = documents.length; // Simplified as currentContent is no longer parsed on upload
   const latestDocument = documents[0] ?? null;
 
@@ -243,7 +259,8 @@ export function Documents() {
           </label>
 
           <p className="muted">
-            The uploaded file will be parsed and saved as a new document immediately.
+            The uploaded file will be parsed and saved as a new document
+            immediately.
           </p>
         </form>
 
@@ -260,15 +277,24 @@ export function Documents() {
               <div className="feature-checklist">
                 <div className="feature-check">
                   <strong>Named snapshots</strong>
-                  <p>Save milestone versions from the detail page before major edits.</p>
+                  <p>
+                    Save milestone versions from the detail page before major
+                    edits.
+                  </p>
                 </div>
                 <div className="feature-check">
                   <strong>Diff compare</strong>
-                  <p>Open a document to compare old and current text side by side.</p>
+                  <p>
+                    Open a document to compare old and current text side by
+                    side.
+                  </p>
                 </div>
                 <div className="feature-check">
                   <strong>Ownership visibility</strong>
-                  <p>Every record keeps a clear owner and latest update timestamp.</p>
+                  <p>
+                    Every record keeps a clear owner and latest update
+                    timestamp.
+                  </p>
                 </div>
               </div>
 
@@ -287,11 +313,14 @@ export function Documents() {
               <div className="stack">
                 <strong>No workspace</strong>
                 <p>
-                  Visit <Link to="/workspace">Workspaces</Link> to create or join a
-                  workspace first.
+                  Visit <Link to="/workspace">Workspaces</Link> to create or
+                  join a workspace first.
                 </p>
               </div>
-              <Link className="button-link documents-empty-link" to="/workspace">
+              <Link
+                className="button-link documents-empty-link"
+                to="/workspace"
+              >
                 Go to Workspaces
               </Link>
             </div>
@@ -322,43 +351,45 @@ export function Documents() {
                 </h2>
               </div>
               <StatusPill
-                tone={document.visibility === "workspace" ? "accent" : "warning"}
+                tone={
+                  document.visibility === "workspace" ? "accent" : "warning"
+                }
               >
                 {document.visibility}
               </StatusPill>
             </div>
 
-              <div className="document-version-strip">
-                <div className="version-chip">
-                  <strong>Owner</strong>
-                  <span>{document.owner}</span>
-                </div>
-                <div className="version-chip">
-                  <strong>Last update</strong>
-                  <span>{formatUpdatedAt(document.updated)}</span>
-                </div>
-                <div className="version-chip">
-                  <strong>Status</strong>
-                  <span>Ready for snapshot and diff</span>
-                </div>
+            <div className="document-version-strip">
+              <div className="version-chip">
+                <strong>Owner</strong>
+                <span>{getDocumentOwnerEmail(document, model)}</span>
               </div>
+              <div className="version-chip">
+                <strong>Last update</strong>
+                <span>{formatUpdatedAt(document.updated)}</span>
+              </div>
+              <div className="version-chip">
+                <strong>Status</strong>
+                <span>Ready for snapshot and diff</span>
+              </div>
+            </div>
 
-              <div className="row space-between wrap gap-sm">
-                <span className="muted">Live PocketBase document</span>
-                <div className="page-actions">
-                  <Link
-                    className="button-link button-link-secondary"
-                    to={`/documents/${document.id}`}
-                  >
-                    Compare versions
-                  </Link>
-                  <Link className="button-link" to={`/documents/${document.id}`}>
-                    Open history
-                  </Link>
-                </div>
+            <div className="row space-between wrap gap-sm">
+              <span className="muted">Live PocketBase document</span>
+              <div className="page-actions">
+                <Link
+                  className="button-link button-link-secondary"
+                  to={`/documents/${document.id}`}
+                >
+                  Compare versions
+                </Link>
+                <Link className="button-link" to={`/documents/${document.id}`}>
+                  Open history
+                </Link>
               </div>
-            </article>
-          ))}
+            </div>
+          </article>
+        ))}
 
         {!loading && activeWorkspace && documents.length === 0 ? (
           <p className="muted">

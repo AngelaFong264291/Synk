@@ -7,6 +7,7 @@ import {
 } from "react";
 import type { RecordModel } from "pocketbase";
 import { AuthContext, type AuthContextValue } from "./auth-context";
+import { collections } from "../lib/types";
 import { pb } from "../lib/pocketbase";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -14,6 +15,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [model, setModel] = useState<RecordModel | null>(
     () => pb.authStore.record,
   );
+
+  useEffect(() => {
+    if (!pb.authStore.token) {
+      return;
+    }
+
+    void pb
+      .collection(collections.users)
+      .authRefresh()
+      .catch(() => {
+        pb.authStore.clear();
+      });
+  }, []);
 
   useEffect(() => {
     return pb.authStore.onChange(() => {

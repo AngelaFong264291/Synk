@@ -1,5 +1,10 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link, useLocation, useNavigate, type Location } from "react-router-dom";
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  type Location,
+} from "react-router-dom";
 import { pb } from "../lib/pocketbase";
 import { useAuth } from "../auth/useAuth";
 
