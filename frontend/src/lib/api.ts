@@ -458,7 +458,6 @@ export async function getDefaultWorkspace() {
 export async function listMyWorkspaces() {
   const user = requireCurrentUser();
   let ownedTeams: WorkspaceRecord[] = [];
-  let ownedWorkspaces: WorkspaceRecord[] = [];
 
   try {
     ownedTeams = await pb
@@ -474,22 +473,9 @@ export async function listMyWorkspaces() {
     }
   }
 
-  try {
-    ownedWorkspaces = await pb
-      .collection(collections.workspaces)
-      .getFullList<WorkspaceRecord>({
-        batch: FULL_LIST_BATCH,
-        filter: pb.filter("owner = {:user}", { user: user.id }),
-        sort: "name",
-      });
-  } catch (error: unknown) {
-    if (
-      !isMissingCollectionError(error) &&
-      !isUnusableLegacyWorkspacesTableError(error)
-    ) {
-      throw error;
-    }
-  }
+  // Do not list legacy `workspaces` here: after `use_teams_as_backend` the table
+  // may be gone or a broken stub (400 on every list), which still logs in the
+  // console before we can catch. Discovery is via `teams` + memberships below.
 
   let memberships: WorkspaceMemberWithExpand[];
 
@@ -521,11 +507,7 @@ export async function listMyWorkspaces() {
     .map((membership) => getMembershipWorkspace(membership))
     .filter((workspace): workspace is WorkspaceRecord => Boolean(workspace));
 
-  const merged = dedupeWorkspaces([
-    ...ownedTeams,
-    ...ownedWorkspaces,
-    ...memberWorkspaces,
-  ]);
+  const merged = dedupeWorkspaces([...ownedTeams, ...memberWorkspaces]);
   merged.sort((a, b) =>
     (a.name ?? "").localeCompare(b.name ?? "", undefined, {
       sensitivity: "base",
