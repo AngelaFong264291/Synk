@@ -102,7 +102,9 @@ export function Tasks() {
   const [selectedDocument, setSelectedDocument] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [pendingCreate, setPendingCreate] = useState(false);
-  const assignedTaskCount = tasks.filter((task) => Boolean(task.assignee)).length;
+  const assignedTaskCount = tasks.filter((task) =>
+    Boolean(task.assignee),
+  ).length;
   const linkedTaskCount = tasks.filter((task) => Boolean(task.document)).length;
   const dueTaskCount = tasks.filter((task) => Boolean(task.dueDate)).length;
 
@@ -331,7 +333,9 @@ export function Tasks() {
 
           <div className="board board-polished">
             {columns.map((column) => {
-              const columnTasks = tasks.filter((task) => task.status === column);
+              const columnTasks = tasks.filter(
+                (task) => task.status === column,
+              );
 
               return (
                 <section
@@ -360,7 +364,10 @@ export function Tasks() {
 
                   <div className="stack board-column-body">
                     {columnTasks.map((task) => (
-                      <article key={task.id} className="task-card task-card-polished">
+                      <article
+                        key={task.id}
+                        className="task-card task-card-polished"
+                      >
                         <div className="row space-between gap-sm wrap task-card-top">
                           <div className="stack task-card-copy">
                             <strong>{task.title}</strong>
@@ -382,7 +389,9 @@ export function Tasks() {
                         <div className="task-card-meta">
                           <div className="task-meta-pill">
                             <span className="task-meta-label">Owner</span>
-                            <strong>{getAssigneeLabel(task.assignee, members)}</strong>
+                            <strong>
+                              {getAssigneeLabel(task.assignee, members)}
+                            </strong>
                           </div>
                           <div className="task-meta-pill">
                             <span className="task-meta-label">Deadline</span>
@@ -429,7 +438,8 @@ export function Tasks() {
                         <div className="stack">
                           <strong>No tasks yet</strong>
                           <p className="muted">
-                            Nothing in {formatTaskStatus(column).toLowerCase()} yet.
+                            Nothing in {formatTaskStatus(column).toLowerCase()}{" "}
+                            yet.
                           </p>
                         </div>
                       </div>

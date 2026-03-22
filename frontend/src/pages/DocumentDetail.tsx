@@ -1,83 +1,42 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
-  getDocumentBundle,
+  createDocumentVersion,
+  getDocumentWithExpand,
+  listDocumentVersionsWithExpand,
+  updateDocument,
 } from "../lib/api";
+import {
+  documentOwnerEmail,
+  formatDocumentTimestamp,
+  versionAuthorEmail,
+} from "../lib/display";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill } from "../components/StatusPill";
-import { pb } from "../lib/pocketbase";
+import { buildLineDiff, getDiffStats } from "../lib/diff";
+import { useActiveWorkspace } from "../lib/useActiveWorkspace";
+import type {
+  DocumentRecordWithExpand,
+  DocumentVersionRecordWithExpand,
+} from "../lib/types";
 
-function getRawFileUrl(document: any) {
-  if (!document.file) return null;
-  let baseUrl = pb.files.getURL(document, document.file);
-  const publicPocketBaseUrl = import.meta.env.VITE_PUBLIC_POCKETBASE_URL;
-  if (publicPocketBaseUrl) {
-    try {
-      const publicUrlObj = new URL(publicPocketBaseUrl);
-      const urlObj = new URL(baseUrl, window.location.origin);
-      urlObj.protocol = publicUrlObj.protocol;
-      urlObj.host = publicUrlObj.host;
-      urlObj.port = publicUrlObj.port;
-      let path = urlObj.pathname;
-      if (publicUrlObj.pathname !== "/") {
-        path = publicUrlObj.pathname.replace(/\/$/, "") + "/" + path.replace(/^\//, "");
-      }
-      urlObj.pathname = path;
-      if (urlObj.host.includes("ngrok")) {
-        urlObj.searchParams.set("ngrok-skip-browser-warning", "1");
-      }
-      // Support bypass for localtunnel if detected
-      if (urlObj.host.includes("localtunnel.me")) {
-        urlObj.searchParams.set("bypass-tunnel-reminder", "1");
-      }
-      baseUrl = urlObj.toString();
-    } catch (e) {}
-  }
-  if (baseUrl.startsWith("/")) {
-    baseUrl = window.location.origin + baseUrl;
-  }
-  return baseUrl;
-}
-
-function getFilePreviewUrl(document: any) {
-  const fileName = document.file?.toLowerCase() || "";
-  const baseUrl = getRawFileUrl(document);
-  if (!baseUrl) return null;
-
-  if (fileName.endsWith(".pdf")) {
-    return baseUrl;
-  }
-
-  if (
-    fileName.endsWith(".docx") ||
-    fileName.endsWith(".docm") ||
-    fileName.endsWith(".xlsx") ||
-    fileName.endsWith(".xlsm") ||
-    fileName.endsWith(".pptx") ||
-    fileName.endsWith(".pptm")
-  ) {
-    const isLocal =
-      window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1" ||
-      window.location.hostname === "[::1]";
-
-    const publicPocketBaseUrl = import.meta.env.VITE_PUBLIC_POCKETBASE_URL;
-    // Only block on localhost if no public override is provided.
-    if (isLocal && !publicPocketBaseUrl) {
-      return null;
-    }
-
-    const encodedUrl = encodeURIComponent(baseUrl);
-    return `https://view.officeapps.live.com/op/embed.aspx?src=${encodedUrl}`;
-  }
-
-  return null;
+function versionLabel(version: DocumentVersionRecordWithExpand) {
+  return version.versionName || `Snapshot ${version.id.slice(0, 4)}`;
 }
 
 export function DocumentDetail() {
   const { documentId } = useParams();
-  const [bundle, setBundle] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const { activeWorkspace } = useActiveWorkspace();
+
+  const [document, setDocument] = useState<DocumentRecordWithExpand | null>(
+    null,
+  );
+  const [versions, setVersions] = useState<DocumentVersionRecordWithExpand[]>(
+    [],
+  );
+  const [contentDraft, setContentDraft] = useState("");
+  const [snapshotName, setSnapshotName] = useState("");
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -90,10 +49,31 @@ export function DocumentDetail() {
       setError(null);
 
       try {
-        const nextBundle = await getDocumentBundle(documentId);
-        if (!cancelled) {
-          setBundle(nextBundle);
+        const [nextDocument, nextVersions] = await Promise.all([
+          getDocumentWithExpand(currentDocumentId),
+          listDocumentVersionsWithExpand(currentDocumentId),
+        ]);
+
+        if (cancelled) {
+          return;
         }
+
+        if (nextDocument.workspace !== workspaceId) {
+          setError("This document is not in the active workspace.");
+          setDocument(null);
+          setVersions([]);
+          setContentDraft("");
+          return;
+        }
+
+        setDocument(nextDocument);
+        setVersions(nextVersions);
+        setLeftVersionId("");
+        setRightVersionId("");
+        setContentDraft(nextDocument?.currentContent ?? "");
+        setSnapshotName(
+          nextVersions[0] ? `${versionLabel(nextVersions[0])} follow-up` : "",
+        );
       } catch (loadError: unknown) {
         if (!cancelled) {
           setError(
@@ -120,8 +100,42 @@ export function DocumentDetail() {
     return <p className="muted">Loading document...</p>;
   }
 
-  if (error) {
-    return <p className="error">{error}</p>;
+  async function onCreateSnapshot(event: SubmitEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!document || !snapshotName) {
+      return;
+    }
+
+    setPendingSave("snapshot");
+    setError(null);
+
+    try {
+      const createdVersion = await createDocumentVersion({
+        documentId: document.id,
+        versionName: snapshotName,
+        content: contentDraft,
+      });
+      setDocument((current) =>
+        current
+          ? {
+              ...current,
+              currentContent: contentDraft,
+            }
+          : current,
+      );
+      setVersions((current) => [createdVersion, ...current]);
+      setRightVersionId(createdVersion.id);
+      setSnapshotName("");
+    } catch (snapshotError: unknown) {
+      setError(
+        snapshotError instanceof Error
+          ? snapshotError.message
+          : "Unable to create snapshot",
+      );
+    } finally {
+      setPendingSave(null);
+    }
   }
 
   if (!bundle) {
@@ -135,22 +149,74 @@ export function DocumentDetail() {
         description="Embedded preview and version history."
       />
 
-      {window.location.hostname === "localhost" && bundle.document.file && (
-        <div style={{ padding: "1rem", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", fontSize: "0.875rem" }}>
-          <strong>Developer Debug:</strong>
-          <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.5rem", alignItems: "center" }}>
-            <code style={{ background: "#eee", padding: "0.2rem 0.4rem", borderRadius: "4px", flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>
-              {getRawFileUrl(bundle.document)}
-            </code>
-            <button
-              className="button-sm"
-              onClick={() => {
-                const url = getRawFileUrl(bundle.document);
-                if (url) navigator.clipboard.writeText(url);
-              }}
-            >
-              Copy File URL
-            </button>
+      {error ? <p className="error">{error}</p> : null}
+      {loading ? <p className="muted">Loading document...</p> : null}
+
+      {document ? (
+        <>
+          <div className="two-column">
+            <form className="panel stack" onSubmit={onSaveDraft}>
+              <div className="row space-between wrap">
+                <h2>Current draft</h2>
+                <StatusPill
+                  tone={
+                    document.visibility === "workspace" ? "accent" : "warning"
+                  }
+                >
+                  {document.visibility}
+                </StatusPill>
+              </div>
+              <div className="meta-grid">
+                <span>Owner: {documentOwnerEmail(document)}</span>
+                <span>Updated: {formatDocumentTimestamp(document)}</span>
+              </div>
+              <label className="field">
+                <span>Document content</span>
+                <textarea
+                  className="textarea textarea-large"
+                  value={contentDraft}
+                  onChange={(event) => setContentDraft(event.target.value)}
+                />
+              </label>
+              <button type="submit" disabled={pendingSave === "draft"}>
+                {pendingSave === "draft" ? "Saving..." : "Save draft"}
+              </button>
+            </form>
+
+            <form className="panel stack" onSubmit={onCreateSnapshot}>
+              <div className="row space-between wrap">
+                <h2>Snapshot history</h2>
+                <StatusPill tone="accent">{versions.length} saved</StatusPill>
+              </div>
+              <label className="field">
+                <span>Snapshot name</span>
+                <input
+                  value={snapshotName}
+                  onChange={(event) => setSnapshotName(event.target.value)}
+                  placeholder="Stakeholder edits"
+                  required
+                />
+              </label>
+              <button type="submit" disabled={pendingSave === "snapshot"}>
+                {pendingSave === "snapshot" ? "Saving..." : "Save snapshot"}
+              </button>
+
+              <div className="panel-list">
+                {versions.map((version) => (
+                  <article key={version.id} className="timeline-item">
+                    <div className="row space-between wrap gap-sm">
+                      <strong>{versionLabel(version)}</strong>
+                      <span className="muted">
+                        {new Date(version.created).toLocaleString()}
+                      </span>
+                    </div>
+                    <p className="muted">
+                      Author: {versionAuthorEmail(version)}
+                    </p>
+                  </article>
+                ))}
+              </div>
+            </form>
           </div>
           <p className="muted" style={{ marginTop: "0.5rem", fontSize: "0.75rem" }}>
             Paste the File URL in a new tab. If it doesn't download the file, your tunnel or PocketBase permissions are not set correctly.

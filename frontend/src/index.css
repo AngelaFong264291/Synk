@@ -392,19 +392,31 @@ ul {
 
 .board-column.board-column-todo {
   background:
-    linear-gradient(180deg, rgba(226, 232, 240, 0.76), rgba(255, 255, 255, 0.98)),
+    linear-gradient(
+      180deg,
+      rgba(226, 232, 240, 0.76),
+      rgba(255, 255, 255, 0.98)
+    ),
     var(--surface);
 }
 
 .board-column.board-column-in-progress {
   background:
-    linear-gradient(180deg, rgba(153, 246, 228, 0.22), rgba(255, 255, 255, 0.98)),
+    linear-gradient(
+      180deg,
+      rgba(153, 246, 228, 0.22),
+      rgba(255, 255, 255, 0.98)
+    ),
     var(--surface);
 }
 
 .board-column.board-column-done {
   background:
-    linear-gradient(180deg, rgba(187, 247, 208, 0.22), rgba(255, 255, 255, 0.98)),
+    linear-gradient(
+      180deg,
+      rgba(187, 247, 208, 0.22),
+      rgba(255, 255, 255, 0.98)
+    ),
     var(--surface);
 }
 
@@ -716,7 +728,11 @@ ul {
 .document-callout {
   padding: 0.9rem 1rem;
   border-radius: 18px;
-  background: linear-gradient(135deg, rgba(15, 118, 110, 0.08), rgba(249, 115, 22, 0.08));
+  background: linear-gradient(
+    135deg,
+    rgba(15, 118, 110, 0.08),
+    rgba(249, 115, 22, 0.08)
+  );
   border: 1px solid rgba(17, 32, 49, 0.08);
 }
 
@@ -749,9 +765,21 @@ ul {
   border: 1px solid rgba(17, 32, 49, 0.06);
   box-shadow: var(--shadow);
   background:
-    radial-gradient(circle at 20% 30%, rgba(159, 220, 246, 0.32), transparent 25%),
-    radial-gradient(circle at 80% 25%, rgba(230, 244, 248, 0.9), transparent 24%),
-    linear-gradient(135deg, rgba(243, 250, 252, 0.95), rgba(235, 247, 251, 0.84));
+    radial-gradient(
+      circle at 20% 30%,
+      rgba(159, 220, 246, 0.32),
+      transparent 25%
+    ),
+    radial-gradient(
+      circle at 80% 25%,
+      rgba(230, 244, 248, 0.9),
+      transparent 24%
+    ),
+    linear-gradient(
+      135deg,
+      rgba(243, 250, 252, 0.95),
+      rgba(235, 247, 251, 0.84)
+    );
 }
 
 .documents-orb {
@@ -1012,7 +1040,11 @@ ul {
   gap: 1rem;
   padding: 1.1rem;
   border-radius: 22px;
-  background: linear-gradient(135deg, rgba(255, 196, 82, 0.14), rgba(255, 255, 255, 0.92));
+  background: linear-gradient(
+    135deg,
+    rgba(255, 196, 82, 0.14),
+    rgba(255, 255, 255, 0.92)
+  );
   border: 1px solid rgba(240, 170, 46, 0.22);
 }
 
@@ -1069,8 +1101,16 @@ ul {
   min-height: 20rem;
   border-radius: 36px;
   background:
-    radial-gradient(circle at 20% 20%, rgba(111, 205, 255, 0.24), transparent 24%),
-    radial-gradient(circle at 82% 28%, rgba(15, 118, 110, 0.14), transparent 22%),
+    radial-gradient(
+      circle at 20% 20%,
+      rgba(111, 205, 255, 0.24),
+      transparent 24%
+    ),
+    radial-gradient(
+      circle at 82% 28%,
+      rgba(15, 118, 110, 0.14),
+      transparent 22%
+    ),
     linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(229, 241, 244, 0.9));
   border: 1px solid rgba(17, 32, 49, 0.06);
   box-shadow: var(--shadow);
@@ -1346,8 +1386,11 @@ ul {
   gap: 1rem;
   padding: 1.2rem;
   border-radius: 24px;
-  background:
-    linear-gradient(135deg, rgba(15, 118, 110, 0.1), rgba(255, 255, 255, 0.94));
+  background: linear-gradient(
+    135deg,
+    rgba(15, 118, 110, 0.1),
+    rgba(255, 255, 255, 0.94)
+  );
   border: 1px solid rgba(17, 32, 49, 0.08);
 }
 
@@ -1375,7 +1418,9 @@ ul {
   box-shadow: 0 12px 24px rgba(17, 32, 49, 0.06);
   text-decoration: none;
   color: var(--text-strong);
-  transition: transform 160ms ease, box-shadow 160ms ease;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .dashboard-quick-card:hover {
@@ -1538,7 +1583,11 @@ ul {
 }
 
 .dashboard-vc-callout {
-  background: linear-gradient(135deg, rgba(15, 118, 110, 0.08), rgba(249, 115, 22, 0.08));
+  background: linear-gradient(
+    135deg,
+    rgba(15, 118, 110, 0.08),
+    rgba(249, 115, 22, 0.08)
+  );
 }
 
 .dashboard-vc-mini-grid {

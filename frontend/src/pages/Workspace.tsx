@@ -1,7 +1,14 @@
 import { useEffect, useState, type SubmitEvent } from "react";
-import { listWorkspaceMembers } from "../lib/api";
+import {
+  listWorkspaceCommits,
+  listWorkspaceMembers,
+  vcRevert,
+} from "../lib/api";
 import { useActiveWorkspace } from "../lib/useActiveWorkspace";
-import type { WorkspaceMemberWithExpand } from "../lib/types";
+import type {
+  WorkspaceCommitRecordWithExpand,
+  WorkspaceMemberWithExpand,
+} from "../lib/types";
 import { StatusPill } from "../components/StatusPill";
 
 function getMemberLabel(member: WorkspaceMemberWithExpand) {
@@ -30,7 +37,10 @@ function getInitials(value: string) {
     .join("");
 }
 
-function getWorkspaceInviteCode(workspace: { inviteCode?: string; code?: string }) {
+function getWorkspaceInviteCode(workspace: {
+  inviteCode?: string;
+  code?: string;
+}) {
   return workspace.inviteCode ?? workspace.code ?? "";
 }
 
@@ -58,11 +68,20 @@ export function Workspace() {
   const [membersLoading, setMembersLoading] = useState(false);
   const [membersError, setMembersError] = useState<string | null>(null);
 
+  const [commits, setCommits] = useState<WorkspaceCommitRecordWithExpand[]>([]);
+  const [commitsLoading, setCommitsLoading] = useState(false);
+  const [commitsError, setCommitsError] = useState<string | null>(null);
+  const [revertingCommitId, setRevertingCommitId] = useState<string | null>(
+    null,
+  );
+
   const [createName, setCreateName] = useState("");
   const [createInviteCode, setCreateInviteCode] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
-  const [pendingAction, setPendingAction] = useState<"create" | "join" | null>(null);
+  const [pendingAction, setPendingAction] = useState<"create" | "join" | null>(
+    null,
+  );
   const workspaceCountLabel = `${workspaces.length} total`;
   const memberCountLabel = activeWorkspace
     ? `${members.length} member${members.length === 1 ? "" : "s"}`
@@ -108,6 +127,78 @@ export function Workspace() {
       cancelled = true;
     };
   }, [activeWorkspaceId]);
+
+  useEffect(() => {
+    if (!activeWorkspaceId) {
+      setCommits([]);
+      setCommitsError(null);
+      return;
+    }
+
+    const workspaceId = activeWorkspaceId;
+    let cancelled = false;
+
+    async function loadCommits() {
+      setCommitsLoading(true);
+      setCommitsError(null);
+
+      try {
+        const nextCommits = await listWorkspaceCommits(workspaceId);
+        if (!cancelled) {
+          setCommits(nextCommits);
+        }
+      } catch (loadError: unknown) {
+        if (!cancelled) {
+          setCommitsError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Unable to load workspace commits",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setCommitsLoading(false);
+        }
+      }
+    }
+
+    void loadCommits();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWorkspaceId]);
+
+  async function onRevertToCommit(commitId: string) {
+    if (!activeWorkspaceId) {
+      return;
+    }
+    const ok = window.confirm(
+      "Restore every document in this workspace to how it was at this commit? " +
+        "Current drafts will be overwritten where they differ. " +
+        "A new commit will be created that records this revert.",
+    );
+    if (!ok) {
+      return;
+    }
+
+    setRevertingCommitId(commitId);
+    setCommitsError(null);
+
+    try {
+      await vcRevert(activeWorkspaceId, commitId);
+      const nextCommits = await listWorkspaceCommits(activeWorkspaceId);
+      setCommits(nextCommits);
+    } catch (revertError: unknown) {
+      setCommitsError(
+        revertError instanceof Error
+          ? revertError.message
+          : "Unable to revert workspace",
+      );
+    } finally {
+      setRevertingCommitId(null);
+    }
+  }
 
   async function onCreateWorkspace(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -198,7 +289,10 @@ export function Workspace() {
         <section className="panel stack workspace-summary-card">
           <div className="row space-between wrap">
             <div className="row gap-sm">
-              <span className="workspace-card-icon workspace-card-icon-workspace" aria-hidden="true">
+              <span
+                className="workspace-card-icon workspace-card-icon-workspace"
+                aria-hidden="true"
+              >
                 <span className="workspace-card-icon-grid" />
               </span>
               <h2>Workspace switcher</h2>
@@ -236,7 +330,7 @@ export function Workspace() {
                 <p className="workspace-invite-code">
                   {getWorkspaceInviteCode(activeWorkspace)}
                 </p>
-              <p className="workspace-highlight-description">
+                <p className="workspace-highlight-description">
                   {activeWorkspace.description ||
                     "No description yet. Use this space to coordinate documents, tasks, and decisions."}
                 </p>
@@ -252,7 +346,10 @@ export function Workspace() {
         <section className="panel stack workspace-summary-card">
           <div className="row space-between wrap">
             <div className="row gap-sm">
-              <span className="workspace-card-icon workspace-card-icon-team" aria-hidden="true">
+              <span
+                className="workspace-card-icon workspace-card-icon-team"
+                aria-hidden="true"
+              >
                 <span className="workspace-card-icon-person workspace-card-icon-person-back" />
                 <span className="workspace-card-icon-person workspace-card-icon-person-front" />
               </span>
@@ -263,7 +360,9 @@ export function Workspace() {
             </StatusPill>
           </div>
 
-          {membersError ? <p className="error">{getFriendlyMembersError(membersError)}</p> : null}
+          {membersError ? (
+            <p className="error">{getFriendlyMembersError(membersError)}</p>
+          ) : null}
 
           {members.length ? (
             <div className="avatar-row">
@@ -281,15 +380,68 @@ export function Workspace() {
               })}
             </div>
           ) : (
-            <p className="muted">
-              Choose a workspace to see people and roles.
-            </p>
+            <p className="muted">Choose a workspace to see people and roles.</p>
           )}
         </section>
       </div>
 
+      {activeWorkspaceId ? (
+        <section className="panel stack">
+          <div className="row space-between wrap">
+            <h2>Workspace commits</h2>
+            <StatusPill tone={commitsError ? "warning" : "success"}>
+              {commitsLoading ? "Loading" : `${commits.length} commits`}
+            </StatusPill>
+          </div>
+
+          {commitsError ? <p className="error">{commitsError}</p> : null}
+
+          {commitsLoading ? (
+            <p className="muted">Loading commit history…</p>
+          ) : commits.length ? (
+            <ul className="stack">
+              {commits.map((commit) => (
+                <li key={commit.id}>
+                  <div className="row space-between wrap gap-sm">
+                    <div>
+                      <strong>{commit.message}</strong>
+                      <p className="muted" style={{ margin: "0.35rem 0 0" }}>
+                        {new Date(commit.created).toLocaleString()}
+                        {commit.expand?.author
+                          ? ` · ${commit.expand.author.email ?? commit.expand.author.name}`
+                          : ""}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="button-secondary"
+                      disabled={revertingCommitId !== null}
+                      onClick={() => {
+                        void onRevertToCommit(commit.id);
+                      }}
+                    >
+                      {revertingCommitId === commit.id
+                        ? "Restoring…"
+                        : "Restore to here"}
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="muted">
+              No workspace commits yet. Saving a document snapshot creates a
+              commit.
+            </p>
+          )}
+        </section>
+      ) : null}
+
       <div className="two-column workspace-form-grid">
-        <form className="panel stack workspace-form-card" onSubmit={onCreateWorkspace}>
+        <form
+          className="panel stack workspace-form-card"
+          onSubmit={onCreateWorkspace}
+        >
           <div className="row space-between wrap">
             <h2>Create a new workspace</h2>
             <StatusPill tone="accent">Owner flow</StatusPill>
@@ -319,7 +471,10 @@ export function Workspace() {
           </button>
         </form>
 
-        <form className="panel stack workspace-form-card" onSubmit={onJoinWorkspace}>
+        <form
+          className="panel stack workspace-form-card"
+          onSubmit={onJoinWorkspace}
+        >
           <div className="row space-between wrap">
             <h2>Join a workspace</h2>
             <StatusPill tone="accent">Invite flow</StatusPill>

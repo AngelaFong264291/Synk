@@ -1,38 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { createDocument, listWorkspaceDocuments } from "../lib/api";
+import { createDocument, listWorkspaceDocumentsWithExpand } from "../lib/api";
+import { documentOwnerEmail, formatDocumentTimestamp } from "../lib/display";
 import { useActiveWorkspace } from "../lib/useActiveWorkspace";
-import type { DocumentRecord } from "../lib/types";
+import type { DocumentRecordWithExpand } from "../lib/types";
 import { StatusPill } from "../components/StatusPill";
-
-function getFileIcon(fileName?: string) {
-  if (!fileName) return "📄";
-  const lower = fileName.toLowerCase();
-  if (lower.endsWith(".docx") || lower.endsWith(".docm")) return "📘";
-  if (lower.endsWith(".xlsx") || lower.endsWith(".xlsm")) return "📗";
-  if (lower.endsWith(".pptx") || lower.endsWith(".pptm")) return "📙";
-  if (lower.endsWith(".pdf")) return "📕";
-  return "📄";
-}
-
-function formatUpdatedAt(value: string) {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
-}
 
 export function Documents() {
   const { activeWorkspace } = useActiveWorkspace();
-  const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+  const [documents, setDocuments] = useState<DocumentRecordWithExpand[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingUpload, setPendingUpload] = useState(false);
@@ -52,7 +28,8 @@ export function Documents() {
       setError(null);
 
       try {
-        const nextDocuments = await listWorkspaceDocuments(workspaceId);
+        const nextDocuments =
+          await listWorkspaceDocumentsWithExpand(workspaceId);
         if (!cancelled) {
           setDocuments(nextDocuments);
         }
@@ -131,9 +108,22 @@ export function Documents() {
     }
   }
 
-  const uniqueOwners = new Set(documents.map((document) => document.owner)).size;
-  const snapshotReadyCount = documents.length; // Simplified as currentContent is no longer parsed on upload
+  const uniqueOwners = new Set(documents.map((document) => document.owner))
+    .size;
+  const snapshotReadyCount = documents.filter(
+    (document) => document.currentContent.trim().length > 0,
+  ).length;
   const latestDocument = documents[0] ?? null;
+  const emptyState = !loading && activeWorkspace && documents.length === 0;
+
+  const documentCards = useMemo(
+    () =>
+      documents.map((document) => ({
+        ...document,
+        preview: document.currentContent.slice(0, 160) || "No content yet.",
+      })),
+    [documents],
+  );
 
   return (
     <section className="stack-xl documents-page">
@@ -224,7 +214,10 @@ export function Documents() {
       </div>
 
       <div className="two-column documents-top-grid">
-        <form className="panel stack documents-create-card">
+        <form
+          className="panel stack documents-create-card"
+          onSubmit={onCreateDocument}
+        >
           <div className="row space-between wrap">
             <h2>New document</h2>
             <StatusPill tone={activeWorkspace ? "accent" : "warning"}>
@@ -260,15 +253,24 @@ export function Documents() {
               <div className="feature-checklist">
                 <div className="feature-check">
                   <strong>Named snapshots</strong>
-                  <p>Save milestone versions from the detail page before major edits.</p>
+                  <p>
+                    Save milestone versions from the detail page before major
+                    edits.
+                  </p>
                 </div>
                 <div className="feature-check">
                   <strong>Diff compare</strong>
-                  <p>Open a document to compare old and current text side by side.</p>
+                  <p>
+                    Open a document to compare old and current text side by
+                    side.
+                  </p>
                 </div>
                 <div className="feature-check">
                   <strong>Ownership visibility</strong>
-                  <p>Every record keeps a clear owner and latest update timestamp.</p>
+                  <p>
+                    Every record keeps a clear owner and latest update
+                    timestamp.
+                  </p>
                 </div>
               </div>
 
@@ -287,11 +289,14 @@ export function Documents() {
               <div className="stack">
                 <strong>No workspace</strong>
                 <p>
-                  Visit <Link to="/workspace">Workspaces</Link> to create or join a
-                  workspace first.
+                  Visit <Link to="/workspace">Workspaces</Link> to create or
+                  join a workspace first.
                 </p>
               </div>
-              <Link className="button-link documents-empty-link" to="/workspace">
+              <Link
+                className="button-link documents-empty-link"
+                to="/workspace"
+              >
                 Go to Workspaces
               </Link>
             </div>
@@ -312,14 +317,24 @@ export function Documents() {
 
         {loading ? <p className="muted">Loading documents...</p> : null}
 
-        {documents.map((document) => (
-          <article key={document.id} className="panel card-hover">
-            <div className="row space-between gap-md wrap">
-              <div>
-                <h2 className="row align-center gap-sm">
-                  <span>{getFileIcon(document.file)}</span>
-                  <span>{document.title}</span>
-                </h2>
+        <div className="panel-list">
+          {documentCards.map((document) => (
+            <article
+              key={document.id}
+              className="panel card-hover documents-record"
+            >
+              <div className="row space-between gap-md wrap">
+                <div className="stack">
+                  <h3>{document.title}</h3>
+                  <p>{document.preview}</p>
+                </div>
+                <StatusPill
+                  tone={
+                    document.visibility === "workspace" ? "accent" : "warning"
+                  }
+                >
+                  {document.visibility}
+                </StatusPill>
               </div>
               <StatusPill
                 tone={document.visibility === "workspace" ? "accent" : "warning"}
@@ -331,11 +346,11 @@ export function Documents() {
               <div className="document-version-strip">
                 <div className="version-chip">
                   <strong>Owner</strong>
-                  <span>{document.owner}</span>
+                  <span>{documentOwnerEmail(document)}</span>
                 </div>
                 <div className="version-chip">
                   <strong>Last update</strong>
-                  <span>{formatUpdatedAt(document.updated)}</span>
+                  <span>{formatDocumentTimestamp(document)}</span>
                 </div>
                 <div className="version-chip">
                   <strong>Status</strong>
@@ -352,7 +367,10 @@ export function Documents() {
                   >
                     Compare versions
                   </Link>
-                  <Link className="button-link" to={`/documents/${document.id}`}>
+                  <Link
+                    className="button-link"
+                    to={`/documents/${document.id}`}
+                  >
                     Open history
                   </Link>
                 </div>
@@ -360,11 +378,13 @@ export function Documents() {
             </article>
           ))}
 
-        {!loading && activeWorkspace && documents.length === 0 ? (
-          <p className="muted">
-            No documents yet. Upload a DOCX, XLSX, PPTX, or PDF file to start.
-          </p>
-        ) : null}
+          {emptyState ? (
+            <p className="muted">
+              No documents yet. Create your first one to start the snapshot
+              flow.
+            </p>
+          ) : null}
+        </div>
       </section>
     </section>
   );

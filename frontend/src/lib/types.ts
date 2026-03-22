@@ -2,7 +2,7 @@ export const collections = {
   users: "users",
   workspaces: "workspaces",
   workspaceMembers: "workspace_members",
-  workspaceInvites: "workspace_invites",
+  workspaceCommits: "workspace_commits",
   documents: "documents",
   documentVersions: "document_versions",
   tasks: "tasks",
@@ -74,6 +74,19 @@ export type DocumentVersionRecord = BaseRecord & {
   versionName: string;
   content: string;
   author: string;
+  commit?: string;
+};
+
+export type WorkspaceCommitRecord = BaseRecord & {
+  workspace: string;
+  message: string;
+  author: string;
+};
+
+export type WorkspaceCommitRecordWithExpand = WorkspaceCommitRecord & {
+  expand?: {
+    author?: UserRecord;
+  };
 };
 
 export type DocumentVersionRecordWithExpand = DocumentVersionRecord & {
