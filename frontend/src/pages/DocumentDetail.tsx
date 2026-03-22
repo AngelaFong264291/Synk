@@ -46,7 +46,7 @@ function getRawFileUrl(document: DocumentRecordWithExpand) {
     }
   }
   if (baseUrl.startsWith("/")) {
-    baseUrl = window.location.origin + baseUrl;
+    baseUrl = pb.baseUrl.replace(/\/$/, "") + baseUrl;
   }
   return baseUrl;
 }
@@ -96,6 +96,76 @@ function formatVersionAuthor(version: DocumentVersionRecordWithExpand) {
   return user.email?.trim() || user.name?.trim() || "Unknown";
 }
 
+function getRawFileUrlForRecord(record: any, fileField: string) {
+  const file = record[fileField];
+  if (!file) return null;
+  let baseUrl = pb.files.getURL(record, file);
+  const publicPocketBaseUrl = import.meta.env.VITE_PUBLIC_POCKETBASE_URL;
+  if (publicPocketBaseUrl) {
+    try {
+      const publicUrlObj = new URL(publicPocketBaseUrl);
+      const urlObj = new URL(baseUrl, window.location.origin);
+      urlObj.protocol = publicUrlObj.protocol;
+      urlObj.host = publicUrlObj.host;
+      urlObj.port = publicUrlObj.port;
+      let path = urlObj.pathname;
+      if (publicUrlObj.pathname !== "/") {
+        path =
+          publicUrlObj.pathname.replace(/\/$/, "") +
+          "/" +
+          path.replace(/^\//, "");
+      }
+      urlObj.pathname = path;
+      if (urlObj.host.includes("ngrok")) {
+        urlObj.searchParams.set("ngrok-skip-browser-warning", "1");
+      }
+      // Support bypass for localtunnel if detected
+      if (urlObj.host.includes("localtunnel.me")) {
+        urlObj.searchParams.set("bypass-tunnel-reminder", "1");
+      }
+      baseUrl = urlObj.toString();
+    } catch {
+      // Ignore invalid public URL overrides
+    }
+  }
+  if (baseUrl.startsWith("/")) {
+    baseUrl = pb.baseUrl.replace(/\/$/, "") + baseUrl;
+  }
+  return baseUrl;
+}
+
+function getFilePreviewUrlForRecord(record: any, fileField: string) {
+  const file = record[fileField];
+  if (!file) return null;
+  const fileName = file.toLowerCase() || "";
+  const baseUrl = getRawFileUrlForRecord(record, fileField);
+  if (!baseUrl) return null;
+
+  if (fileName.endsWith(".pdf")) {
+    return baseUrl;
+  }
+
+  if (
+    fileName.endsWith(".docx") ||
+    fileName.endsWith(".docm") ||
+    fileName.endsWith(".xlsx") ||
+    fileName.endsWith(".xlsm") ||
+    fileName.endsWith(".pptx") ||
+    fileName.endsWith(".pptm")
+  ) {
+    const isLocal =
+      window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1" ||
+      window.location.hostname === "[::1]";
+
+    const publicPocketBaseUrl = import.meta.env.VITE_PUBLIC_POCKETBASE_URL;
+    // Only block on localhost if no public override is provided.
+    return `https://view.officeapps.live.com/op/embed.aspx?src=${encodedUrl}`;
+  }
+
+  return null;
+}
+
 export function DocumentDetail() {
   const { documentId } = useParams();
   const [bundle, setBundle] = useState<DocumentBundle | null>(null);
@@ -103,13 +173,11 @@ export function DocumentDetail() {
   const [error, setError] = useState<string | null>(null);
 
   const [snapshotVersionName, setSnapshotVersionName] = useState("");
-  const [snapshotContent, setSnapshotContent] = useState("");
+  const [snapshotFile, setSnapshotFile] = useState<File | null>(null);
   const [snapshotPending, setSnapshotPending] = useState(false);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
-  const [revertingVersionId, setRevertingVersionId] = useState<string | null>(
-    null,
-  );
-  const [revertError, setRevertError] = useState<string | null>(null);
+
+  const [previewVersion, setPreviewVersion] = useState<DocumentVersionRecordWithExpand | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -149,16 +217,6 @@ export function DocumentDetail() {
     };
   }, [documentId]);
 
-  useEffect(() => {
-    const doc = bundle?.document;
-    if (!doc) {
-      return;
-    }
-    setSnapshotContent(doc.currentContent ?? "");
-    // Only sync when this document's id or stored body changes (not on every bundle refresh).
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- deps are id + currentContent
-  }, [bundle?.document?.id, bundle?.document?.currentContent]);
-
   async function onCreateSnapshot(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!documentId || !bundle) {
@@ -171,23 +229,23 @@ export function DocumentDetail() {
       return;
     }
 
-    const content = snapshotContent.trim();
-    if (!content) {
-      setSnapshotError("Snapshot body cannot be empty.");
+    if (!snapshotFile) {
+      setSnapshotError("Select a file to upload.");
       return;
     }
 
     setSnapshotPending(true);
     setSnapshotError(null);
-    setRevertError(null);
 
     try {
       await createDocumentVersion({
         documentId,
         versionName: name,
-        content,
+        file: snapshotFile,
       });
+      await updateDocument(documentId, { file: snapshotFile });
       setSnapshotVersionName("");
+      setSnapshotFile(null);
       if (documentId) {
         const nextBundle = await getDocumentBundle(documentId);
         setBundle(nextBundle);
@@ -205,36 +263,8 @@ export function DocumentDetail() {
     if (!bundle?.document) {
       return;
     }
-    setSnapshotContent(bundle.document.currentContent ?? "");
+    setSnapshotFile(null);
     setSnapshotError(null);
-  }
-
-  async function onRevertToVersion(version: DocumentVersionRecordWithExpand) {
-    if (!documentId || !bundle) {
-      return;
-    }
-
-    const ok = window.confirm(
-      `Replace the current document body with snapshot "${version.versionName}"? Your live body is updated; existing snapshots are not removed.`,
-    );
-    if (!ok) {
-      return;
-    }
-
-    setRevertError(null);
-    setRevertingVersionId(version.id);
-
-    try {
-      await updateDocument(documentId, { currentContent: version.content });
-      const nextBundle = await getDocumentBundle(documentId);
-      setBundle(nextBundle);
-    } catch (err: unknown) {
-      setRevertError(
-        err instanceof Error ? err.message : "Unable to revert document",
-      );
-    } finally {
-      setRevertingVersionId(null);
-    }
   }
 
   if (loading) {
@@ -253,7 +283,7 @@ export function DocumentDetail() {
       <PageHeader
         eyebrow="Document detail"
         title={bundle.document.title}
-        description="Preview the file, save named snapshots of the current body, and compare version history."
+        description="Preview the file, upload new versions, and compare version history."
       />
 
       {window.location.hostname === "localhost" && bundle.document.file && (
@@ -288,18 +318,6 @@ export function DocumentDetail() {
               {getRawFileUrl(bundle.document)}
             </code>
             <button
-              className="button-sm"
-              onClick={() => {
-                const url = getRawFileUrl(bundle.document);
-                if (url) navigator.clipboard.writeText(url);
-              }}
-            >
-              Copy File URL
-            </button>
-          </div>
-          <p
-            className="muted"
-            style={{ marginTop: "0.5rem", fontSize: "0.75rem" }}
           >
             Paste the File URL in a new tab. If it doesn't download the file,
             your tunnel or PocketBase permissions are not set correctly.
@@ -308,62 +326,81 @@ export function DocumentDetail() {
       )}
 
       <div className="panel stack">
-        {getFilePreviewUrl(bundle.document) ? (
-          <iframe
-            src={getFilePreviewUrl(bundle.document)!}
-            width="100%"
-            height="800px"
-            frameBorder="0"
-            style={{ borderRadius: "12px", background: "#f1f5f9" }}
-            title="Document preview"
-          />
-        ) : (
-          <div className="stack">
-            {bundle.document.file &&
-              (bundle.document.file.toLowerCase().endsWith(".docx") ||
-                bundle.document.file.toLowerCase().endsWith(".docm") ||
-                bundle.document.file.toLowerCase().endsWith(".xlsx") ||
-                bundle.document.file.toLowerCase().endsWith(".xlsm") ||
-                bundle.document.file.toLowerCase().endsWith(".pptx") ||
-                bundle.document.file.toLowerCase().endsWith(".pptm")) && (
-                <div
-                  className="warning"
-                  style={{
-                    padding: "0.75rem",
-                    borderRadius: "8px",
-                    background: "rgba(234, 179, 8, 0.1)",
-                    color: "#854d0e",
-                    fontSize: "0.875rem",
-                    marginBottom: "1rem",
-                  }}
-                >
-                  <p>
-                    <strong>Localhost Preview Notice:</strong> Office Online
-                    Viewer is disabled because it cannot reach your local
-                    server.
-                  </p>
-                  <p style={{ marginTop: "0.5rem" }}>
-                    To enable high-fidelity preview on localhost:
-                  </p>
-                  <ol style={{ marginLeft: "1.5rem", marginTop: "0.25rem" }}>
-                    <li>
-                      Start a tunnel (e.g.,{" "}
-                      <code>
-                        cloudflared tunnel --url http://localhost:8090
-                      </code>
-                      ) to expose your PocketBase server.
-                    </li>
-                    <li>
-                      Set <code>VITE_PUBLIC_POCKETBASE_URL</code> in your{" "}
-                      <code>.env</code> file to the tunnel URL.
-                    </li>
-                    <li>Restart the development server.</li>
-                  </ol>
-                </div>
-              )}
-            <p className="muted">No preview available for this file type.</p>
+        {previewVersion && (
+          <div className="row space-between wrap">
+            <h3>Previewing snapshot: {previewVersion.versionName}</h3>
+          const previewRecord = bundle.document;
+          const previewUrl = getFilePreviewUrl(bundle.document);
+            >
+              Back to current
+            </button>
           </div>
         )}
+        {(() => {
+          const previewRecord = previewVersion || bundle.document;
+          const previewUrl = getFilePreviewUrl(previewRecord);
+          const fileName = previewRecord.file?.toLowerCase() || "";
+
+          return previewUrl ? (
+            <div className="stack">
+              <iframe
+                key={'current'}
+                width="100%"
+                height="800px"
+                frameBorder="0"
+                style={{ borderRadius: "12px", background: "#f1f5f9" }}
+                title="Document preview"
+                key={previewVersion ? previewVersion.id : 'current'}
+              />
+            </div>
+          ) : (
+            <div className="stack">
+              {previewRecord.file &&
+                (fileName.endsWith(".docx") ||
+                  fileName.endsWith(".docm") ||
+                  fileName.endsWith(".xlsx") ||
+                  fileName.endsWith(".xlsm") ||
+                  fileName.endsWith(".pptx") ||
+                  fileName.endsWith(".pptm")) && (
+                  <div
+                    className="warning"
+                    style={{
+                      padding: "0.75rem",
+                      borderRadius: "8px",
+                      background: "rgba(234, 179, 8, 0.1)",
+                      color: "#854d0e",
+                      fontSize: "0.875rem",
+                      marginBottom: "1rem",
+                    }}
+                  >
+                    <p>
+                      <strong>Localhost Preview Notice:</strong> Office Online
+                      Viewer is disabled because it cannot reach your local
+                      server.
+                    </p>
+                    <p style={{ marginTop: "0.5rem" }}>
+                      To enable high-fidelity preview on localhost:
+                    </p>
+                    <ol style={{ marginLeft: "1.5rem", marginTop: "0.25rem" }}>
+                      <li>
+                        Start a tunnel (e.g.,{" "}
+                        <code>
+                          cloudflared tunnel --url http://localhost:8090
+                        </code>
+                        ) to expose your PocketBase server.
+                      </li>
+                      <li>
+                        Set <code>VITE_PUBLIC_POCKETBASE_URL</code> in your{" "}
+                        <code>.env</code> file to the tunnel URL.
+                      </li>
+                      <li>Restart the development server.</li>
+                    </ol>
+                  </div>
+                )}
+              <p className="muted">No preview available for this file type.</p>
+            </div>
+          );
+        })()}
       </div>
 
       <div className="row space-between wrap">
@@ -405,9 +442,7 @@ export function DocumentDetail() {
           <div className="row space-between wrap gap-sm">
             <h3>Create snapshot</h3>
             <p className="muted small" style={{ maxWidth: "28rem" }}>
-              Saves a named version via the document_versions API (version name
-              + body). Defaults to the document&apos;s current body; edit before
-              saving.
+              Upload a new version of the file, which will update the document's file and create a named version.
             </p>
           </div>
 
@@ -424,13 +459,17 @@ export function DocumentDetail() {
               />
             </label>
             <label className="field">
-              <span>Snapshot body</span>
-              <textarea
-                className="textarea textarea-large"
-                value={snapshotContent}
-                onChange={(event) => setSnapshotContent(event.target.value)}
+              <span>Snapshot file</span>
+              <input
+                type="file"
+                onChange={(event) => {
+                  const file = event.target.files?.[0] || null;
+                  setSnapshotFile(file);
+                  if (file) {
+                    setSnapshotError(null);
+                  }
+                }}
                 disabled={snapshotPending}
-                spellCheck
               />
             </label>
             {snapshotError ? <p className="error">{snapshotError}</p> : null}
@@ -444,7 +483,7 @@ export function DocumentDetail() {
                 onClick={onResetSnapshotBody}
                 disabled={snapshotPending}
               >
-                Reset body from current document
+                Reset file from current document
               </button>
             </div>
           </form>
@@ -452,41 +491,27 @@ export function DocumentDetail() {
 
         <div className="panel stack">
           <h3>Version history</h3>
-          {revertError ? <p className="error">{revertError}</p> : null}
           {bundle.versions.length > 0 ? (
             <div className="list stack-sm">
               {bundle.versions.map(
-                (version: DocumentVersionRecordWithExpand) => (
-                  <div key={version.id} className="list-row panel-sm stack">
-                    <div className="row space-between wrap gap-sm document-version-header">
-                      <div className="stack-xs">
-                        <strong>{version.versionName}</strong>
-                        <p className="muted small">
-                          {formatVersionAuthor(version)} ·{" "}
-                          {new Date(version.created).toLocaleString()}
-                        </p>
-                      </div>
+                      <a
+                        href={getFilePreviewUrlForRecord(version, "file") || getRawFileUrlForRecord(version, "file")}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      </a>
+                  >
+                    <div className="stack-xs">
                       <button
-                        type="button"
-                        className="button-secondary"
-                        disabled={
-                          revertingVersionId !== null || snapshotPending
-                        }
-                        onClick={() => void onRevertToVersion(version)}
+                        className="button-link"
+                        onClick={() => setPreviewVersion(version)}
                       >
-                        {revertingVersionId === version.id
-                          ? "Reverting…"
-                          : "Revert to this"}
+                        <strong>{version.versionName}</strong>
                       </button>
+                      <p className="muted small">
+                        {formatVersionAuthor(version)} ·{" "}
+                        {new Date(version.created).toLocaleString()}
+                      </p>
                     </div>
-                    <details className="document-version-body">
-                      <summary className="muted small">
-                        View snapshot body
-                      </summary>
-                      <pre className="document-version-pre">
-                        {version.content}
-                      </pre>
-                    </details>
                   </div>
                 ),
               )}

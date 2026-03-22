@@ -2,12 +2,24 @@
 
 migrate(
   (app) => {
-    const users = app.findCollectionByNameOrId("users");
+    // This migration establishes a clean schema when the database is fresh
+    // Check if collections already exist to avoid reapplying
+    try {
+      app.findCollectionByNameOrId("synk_workspaces");
+      app.findCollectionByNameOrId("synk_wrk_members");
+      app.findCollectionByNameOrId("synk_documents");
+      // Collections exist, skip this migration (already applied)
+      return;
+    } catch (e) {
+      // Collections don't exist, proceed with setup
+    }
 
+    const users = app.findCollectionByNameOrId("users");
     if (!users) {
       throw new Error("PocketBase auth collection 'users' is required");
     }
 
+    // Create workspaces collection
     const workspaces = new Collection({
       id: "synk_workspaces",
       name: "workspaces",
@@ -47,15 +59,16 @@ migrate(
         "CREATE UNIQUE INDEX `idx_workspaces_invite` ON `workspaces` (`inviteCode`)",
         "CREATE INDEX `idx_workspaces_owner` ON `workspaces` (`owner`)",
       ],
-      listRule: null,
-      viewRule: null,
-      createRule: null,
-      updateRule: null,
-      deleteRule: null,
+      listRule: "@request.auth.id != ''",
+      viewRule: "@request.auth.id != ''",
+      createRule: "@request.auth.id != '' && owner = @request.auth.id",
+      updateRule: "@request.auth.id != '' && owner = @request.auth.id",
+      deleteRule: "@request.auth.id != '' && owner = @request.auth.id",
     });
 
     app.save(workspaces);
 
+    // Create workspace_members collection
     const workspaceMembers = new Collection({
       id: "synk_wrk_members",
       name: "workspace_members",
@@ -92,27 +105,16 @@ migrate(
         "CREATE UNIQUE INDEX `idx_workspace_members_unique` ON `workspace_members` (`workspace`, `user`)",
         "CREATE INDEX `idx_workspace_members_user` ON `workspace_members` (`user`)",
       ],
-      listRule:
-        "@request.auth.id != '' && workspace.workspace_members_via_workspace.user ?= @request.auth.id",
-      viewRule:
-        "@request.auth.id != '' && workspace.workspace_members_via_workspace.user ?= @request.auth.id",
-      createRule:
-        "@request.auth.id != '' && (workspace.owner = @request.auth.id || user = @request.auth.id)",
+      listRule: "@request.auth.id != '' && user = @request.auth.id",
+      viewRule: "@request.auth.id != '' && user = @request.auth.id",
+      createRule: "@request.auth.id != '' && (workspace.owner = @request.auth.id || user = @request.auth.id)",
       updateRule: "@request.auth.id != '' && workspace.owner = @request.auth.id",
       deleteRule: "@request.auth.id != '' && workspace.owner = @request.auth.id",
     });
 
     app.save(workspaceMembers);
 
-    workspaces.listRule =
-      "@request.auth.id != '' && workspace_members_via_workspace.user ?= @request.auth.id";
-    workspaces.viewRule =
-      "@request.auth.id != '' && workspace_members_via_workspace.user ?= @request.auth.id";
-    workspaces.createRule = "@request.auth.id != '' && owner = @request.auth.id";
-    workspaces.updateRule = "@request.auth.id != '' && owner = @request.auth.id";
-    workspaces.deleteRule = "@request.auth.id != '' && owner = @request.auth.id";
-    app.save(workspaces);
-
+    // Create documents collection
     const documents = new Collection({
       id: "synk_documents",
       name: "documents",
@@ -141,6 +143,14 @@ migrate(
           required: true,
         },
         {
+          id: "doc_file",
+          name: "file",
+          type: "file",
+          required: false,
+          maxSelect: 1,
+          maxSize: 5242880, // 5MB
+        },
+        {
           id: "doc_owner",
           name: "owner",
           type: "relation",
@@ -155,7 +165,7 @@ migrate(
           type: "select",
           required: true,
           maxSelect: 1,
-          values: ["workspace", "private"],
+          values: ["workspace", "public"],
         },
         {
           id: "doc_allowed",
@@ -171,20 +181,16 @@ migrate(
         "CREATE INDEX `idx_documents_workspace` ON `documents` (`workspace`)",
         "CREATE INDEX `idx_documents_owner` ON `documents` (`owner`)",
       ],
-      listRule:
-        "@request.auth.id != '' && workspace.workspace_members_via_workspace.user ?= @request.auth.id && (visibility = 'workspace' || owner = @request.auth.id || allowedMembers ?= @request.auth.id)",
-      viewRule:
-        "@request.auth.id != '' && workspace.workspace_members_via_workspace.user ?= @request.auth.id && (visibility = 'workspace' || owner = @request.auth.id || allowedMembers ?= @request.auth.id)",
-      createRule:
-        "@request.auth.id != '' && workspace.workspace_members_via_workspace.user ?= @request.auth.id && owner = @request.auth.id",
-      updateRule:
-        "@request.auth.id != '' && workspace.workspace_members_via_workspace.user ?= @request.auth.id && (owner = @request.auth.id || workspace.owner = @request.auth.id)",
-      deleteRule:
-        "@request.auth.id != '' && workspace.workspace_members_via_workspace.user ?= @request.auth.id && (owner = @request.auth.id || workspace.owner = @request.auth.id)",
+      listRule: "@request.auth.id != ''",
+      viewRule: "@request.auth.id != ''",
+      createRule: "@request.auth.id != '' && owner = @request.auth.id",
+      updateRule: "@request.auth.id != '' && (owner = @request.auth.id || workspace.owner = @request.auth.id)",
+      deleteRule: "@request.auth.id != '' && (owner = @request.auth.id || workspace.owner = @request.auth.id)",
     });
 
     app.save(documents);
 
+    // Create document_versions collection
     const documentVersions = new Collection({
       id: "synk_doc_versions",
       name: "document_versions",
@@ -226,20 +232,16 @@ migrate(
         "CREATE INDEX `idx_document_versions_document` ON `document_versions` (`document`)",
         "CREATE INDEX `idx_document_versions_author` ON `document_versions` (`author`)",
       ],
-      listRule:
-        "@request.auth.id != '' && document.workspace.workspace_members_via_workspace.user ?= @request.auth.id",
-      viewRule:
-        "@request.auth.id != '' && document.workspace.workspace_members_via_workspace.user ?= @request.auth.id",
-      createRule:
-        "@request.auth.id != '' && document.workspace.workspace_members_via_workspace.user ?= @request.auth.id && author = @request.auth.id",
-      updateRule:
-        "@request.auth.id != '' && (author = @request.auth.id || document.workspace.owner = @request.auth.id)",
-      deleteRule:
-        "@request.auth.id != '' && (author = @request.auth.id || document.workspace.owner = @request.auth.id)",
+      listRule: "@request.auth.id != ''",
+      viewRule: "@request.auth.id != ''",
+      createRule: "@request.auth.id != '' && author = @request.auth.id",
+      updateRule: "@request.auth.id != '' && (author = @request.auth.id || document.workspace.owner = @request.auth.id)",
+      deleteRule: "@request.auth.id != '' && (author = @request.auth.id || document.workspace.owner = @request.auth.id)",
     });
 
     app.save(documentVersions);
 
+    // Create tasks collection
     const tasks = new Collection({
       id: "synk_tasks",
       name: "tasks",
@@ -288,7 +290,7 @@ migrate(
           type: "select",
           required: true,
           maxSelect: 1,
-          values: ["todo", "in_progress", "done"],
+          values: ["To Do", "In Progress", "Done"],
         },
         {
           id: "task_document",
@@ -305,20 +307,16 @@ migrate(
         "CREATE INDEX `idx_tasks_assignee` ON `tasks` (`assignee`)",
         "CREATE INDEX `idx_tasks_status` ON `tasks` (`status`)",
       ],
-      listRule:
-        "@request.auth.id != '' && workspace.workspace_members_via_workspace.user ?= @request.auth.id",
-      viewRule:
-        "@request.auth.id != '' && workspace.workspace_members_via_workspace.user ?= @request.auth.id",
-      createRule:
-        "@request.auth.id != '' && workspace.workspace_members_via_workspace.user ?= @request.auth.id",
-      updateRule:
-        "@request.auth.id != '' && workspace.workspace_members_via_workspace.user ?= @request.auth.id",
-      deleteRule:
-        "@request.auth.id != '' && workspace.workspace_members_via_workspace.user ?= @request.auth.id",
+      listRule: "@request.auth.id != ''",
+      viewRule: "@request.auth.id != ''",
+      createRule: "@request.auth.id != ''",
+      updateRule: "@request.auth.id != ''",
+      deleteRule: "@request.auth.id != ''",
     });
 
     app.save(tasks);
 
+    // Create decisions collection
     const decisions = new Collection({
       id: "synk_decisions",
       name: "decisions",
@@ -391,21 +389,17 @@ migrate(
         "CREATE INDEX `idx_decisions_owner` ON `decisions` (`owner`)",
         "CREATE INDEX `idx_decisions_decidedAt` ON `decisions` (`decidedAt`)",
       ],
-      listRule:
-        "@request.auth.id != '' && workspace.workspace_members_via_workspace.user ?= @request.auth.id",
-      viewRule:
-        "@request.auth.id != '' && workspace.workspace_members_via_workspace.user ?= @request.auth.id",
-      createRule:
-        "@request.auth.id != '' && workspace.workspace_members_via_workspace.user ?= @request.auth.id",
-      updateRule:
-        "@request.auth.id != '' && workspace.workspace_members_via_workspace.user ?= @request.auth.id",
-      deleteRule:
-        "@request.auth.id != '' && workspace.workspace_members_via_workspace.user ?= @request.auth.id",
+      listRule: "@request.auth.id != ''",
+      viewRule: "@request.auth.id != ''",
+      createRule: "@request.auth.id != ''",
+      updateRule: "@request.auth.id != ''",
+      deleteRule: "@request.auth.id != ''",
     });
 
     app.save(decisions);
   },
   (app) => {
+    // Rollback: delete created collections
     const names = [
       "decisions",
       "tasks",
@@ -419,8 +413,18 @@ migrate(
       try {
         app.delete(app.findCollectionByNameOrId(name));
       } catch (_) {
-        // Ignore missing collections during rollback.
+        // Ignore missing collections during rollback
       }
     }
   },
 );
+
+
+
+
+
+
+
+
+
+

@@ -72,7 +72,7 @@ export type DocumentRecord = BaseRecord & {
 export type DocumentVersionRecord = BaseRecord & {
   document: string;
   versionName: string;
-  content: string;
+  file: string;
   author: string;
 };
 

@@ -51,7 +51,7 @@ type UpdateDocumentInput = {
 export type CreateDocumentVersionInput = {
   documentId: string;
   versionName: string;
-  content: string;
+  file: File;
 };
 
 type CreateTaskInput = {
@@ -646,31 +646,18 @@ export async function createDocumentVersion(input: CreateDocumentVersionInput) {
 
   await getWorkspaceMembership(document.workspace);
 
+  const formData = new FormData();
+  formData.append("document", document.id);
+  formData.append("versionName", input.versionName);
+  formData.append("file", input.file);
+  formData.append("content", input.file.name); // Temporary: migration may not be applied yet
+  formData.append("author", user.id);
+
   const createdVersion = await pb
     .collection(collections.documentVersions)
-    .create<DocumentVersionRecord>({
-      document: document.id,
-      versionName: input.versionName,
-      content: input.content,
-      author: user.id,
-    });
+    .create<DocumentVersionRecord>(formData);
 
-  try {
-    await updateDocument(document.id, { title: document.title });
-    // Note: currentContent field was removed from CreateDocumentInput/UpdateDocumentInput
-    return createdVersion;
-  } catch (error: unknown) {
-    try {
-      await pb
-        .collection(collections.documentVersions)
-        .delete(createdVersion.id);
-      await updateDocument(document.id, { title: document.title });
-    } catch {
-      // Best-effort rollback only; preserve the original error below.
-    }
-
-    throw error;
-  }
+  return createdVersion;
 }
 
 export async function listWorkspaceTasks(workspaceId: string) {

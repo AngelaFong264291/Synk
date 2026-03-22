@@ -66,7 +66,7 @@ export function Dashboard() {
   }
 
   const { documents, tasks, workspace, source } = data;
-  const openTasks = tasks.filter((task) => task.status !== "Done");
+  const allOpenTasks = tasks.filter((task) => task.status !== "Done");
   const completedTasks = tasks.filter((task) => task.status === "Done");
   const totalSnapshots = documents.reduce(
     (count, document) => count + document.versions.length,
@@ -138,7 +138,7 @@ export function Dashboard() {
         </article>
         <article className="stat-card dashboard-metric-card">
           <span className="dashboard-kpi-label">Task Ownership</span>
-          <strong className="stat-value">{openTasks.length}</strong>
+          <strong className="stat-value">{allOpenTasks.length}</strong>
           <p>Open tasks, with {dueTodayTasks.length} due today</p>
         </article>
         <article className="stat-card dashboard-metric-card">
