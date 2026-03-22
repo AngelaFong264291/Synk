@@ -1,3 +1,4 @@
+import { ClientResponseError } from "pocketbase";
 import { pb } from "./pocketbase";
 import { collections } from "./types";
 import type {
@@ -34,6 +35,7 @@ type CreateDocumentInput = {
   workspaceId: string;
   title: string;
   file?: File;
+  currentContent?: string;
   visibility?: "workspace" | "private";
   allowedMembers?: string[];
 };
@@ -41,11 +43,12 @@ type CreateDocumentInput = {
 type UpdateDocumentInput = {
   title?: string;
   file?: File;
+  currentContent?: string;
   visibility?: "workspace" | "private";
   allowedMembers?: string[];
 };
 
-type CreateVersionInput = {
+export type CreateDocumentVersionInput = {
   documentId: string;
   versionName: string;
   content: string;
@@ -87,8 +90,86 @@ function normalizeInviteCode(code: string) {
   return code.trim().toUpperCase();
 }
 
+function formatPocketBaseFieldData(data: unknown): {
+  summary: string | null;
+  raw: string | null;
+} {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    return { summary: null, raw: null };
+  }
+
+  const record = data as Record<string, unknown>;
+  const parts: string[] = [];
+
+  for (const [key, val] of Object.entries(record)) {
+    if (val && typeof val === "object" && !Array.isArray(val)) {
+      const msg = (val as { message?: string }).message;
+      if (typeof msg === "string" && msg) {
+        parts.push(`${key}: ${msg}`);
+        continue;
+      }
+    }
+    if (typeof val === "string" && val) {
+      parts.push(`${key}: ${val}`);
+    }
+  }
+
+  const summary = parts.length ? parts.join("; ") : null;
+  const raw = Object.keys(record).length > 0 ? JSON.stringify(record) : null;
+  return { summary, raw };
+}
+
+function formatPocketBaseRequestError(error: unknown): string {
+  if (error instanceof ClientResponseError) {
+    const response = error.response as Record<string, unknown> | undefined;
+    const nestedData = response?.data;
+    const { summary, raw } = formatPocketBaseFieldData(nestedData);
+    const base = error.message || "Request failed";
+
+    if (summary) {
+      return `${base} (${summary})`;
+    }
+
+    const payload =
+      response && typeof response === "object"
+        ? JSON.stringify(response)
+        : undefined;
+    if (payload && payload !== "{}" && payload !== '{"data":{}}') {
+      return `${base}: ${payload}`;
+    }
+
+    if (raw) {
+      return `${base}: ${raw}`;
+    }
+
+    return base;
+  }
+
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** Ensures the auth record still exists server-side (e.g. after pb_data reset). */
+async function requireValidAuthSession() {
+  if (!pb.authStore.token) {
+    throw new Error("Authentication required");
+  }
+
+  try {
+    await pb.collection(collections.users).authRefresh();
+  } catch {
+    pb.authStore.clear();
+    throw new Error(
+      "Your session is no longer valid (the server may have been reset). Please sign in again.",
+    );
+  }
+}
+
 function dedupeWorkspaces(workspaces: WorkspaceRecord[]) {
-  return [...new Map(workspaces.map((workspace) => [workspace.id, workspace])).values()];
+  return [
+    ...new Map(
+      workspaces.map((workspace) => [workspace.id, workspace]),
+    ).values(),
+  ];
 }
 
 function isMissingCollectionError(error: unknown) {
@@ -101,11 +182,21 @@ function isMissingCollectionError(error: unknown) {
     message.includes("missing collection context") ||
     message.includes("missing or invalid collection context") ||
     message.includes("404") ||
-    message.includes("not found")
+    message.includes("not found") ||
+    message.includes("wasn't found") ||
+    message.includes("requested resource")
   );
 }
 
+function isNotFoundError(error: unknown) {
+  return error instanceof ClientResponseError && error.status === 404;
+}
+
 async function getWorkspaceByInviteCode(inviteCode: string) {
+  if (!pb.authStore.isValid || !pb.authStore.record) {
+    throw new Error("Authentication required to look up an invite code.");
+  }
+
   const normalizedCode = normalizeInviteCode(inviteCode);
 
   return pb
@@ -134,19 +225,6 @@ async function recoverWorkspaceAfterCreateFailure(
   return null;
 }
 
-async function getOwnedTeam(workspaceId: string, userId: string) {
-  try {
-    const team = await pb.collection(collections.teams).getOne<WorkspaceRecord>(workspaceId);
-    return team.owner === userId ? team : null;
-  } catch (error: unknown) {
-    if (!isMissingCollectionError(error)) {
-      throw error;
-    }
-
-    return null;
-  }
-}
-
 async function getOwnedWorkspace(workspaceId: string, userId: string) {
   try {
     const workspace = await pb
@@ -154,11 +232,11 @@ async function getOwnedWorkspace(workspaceId: string, userId: string) {
       .getOne<WorkspaceRecord>(workspaceId);
     return workspace.owner === userId ? workspace : null;
   } catch (error: unknown) {
-    if (!isMissingCollectionError(error)) {
-      throw error;
+    if (isNotFoundError(error) || isMissingCollectionError(error)) {
+      return null;
     }
 
-    return null;
+    throw error;
   }
 }
 
@@ -188,6 +266,19 @@ function createOwnerMembership(
 
 function getMembershipWorkspace(membership: WorkspaceMemberWithExpand) {
   return membership.expand?.workspace ?? null;
+}
+
+function getMembershipWorkspaceId(
+  membership: WorkspaceMemberWithExpand,
+): string | null {
+  const raw = membership.workspace;
+  if (typeof raw === "string") {
+    return raw;
+  }
+  if (raw && typeof raw === "object" && "id" in raw) {
+    return (raw as { id: string }).id;
+  }
+  return null;
 }
 
 async function getWorkspaceMembership(workspaceId: string, userId?: string) {
@@ -277,9 +368,28 @@ export async function listMyWorkspaces() {
     memberships = [];
   }
 
-  const memberWorkspaces = memberships
-    .map((membership) => getMembershipWorkspace(membership))
-    .filter((workspace): workspace is WorkspaceRecord => Boolean(workspace));
+  const memberWorkspaces: WorkspaceRecord[] = [];
+
+  for (const membership of memberships) {
+    let workspace = getMembershipWorkspace(membership);
+
+    if (!workspace) {
+      const workspaceId = getMembershipWorkspaceId(membership);
+      if (workspaceId) {
+        try {
+          workspace = await pb
+            .collection(collections.workspaces)
+            .getOne<WorkspaceRecord>(workspaceId);
+        } catch {
+          // expand/view rules can hide nested workspace; direct fetch may still work
+        }
+      }
+    }
+
+    if (workspace) {
+      memberWorkspaces.push(workspace);
+    }
+  }
 
   return dedupeWorkspaces([...ownedWorkspaces, ...memberWorkspaces]);
 }
@@ -288,37 +398,31 @@ export async function createWorkspace(input: CreateWorkspaceInput) {
   const user = requireCurrentUser();
   const normalizedCode = normalizeInviteCode(input.inviteCode);
 
-  try {
-    const workspace = await pb
-      .collection(collections.teams)
-      .create<WorkspaceRecord>({
-        name: input.name,
-        owner: user.id,
-        code: normalizedCode,
-      });
+  const name = input.name.trim();
+  if (!name) {
+    throw new Error("Workspace name is required.");
+  }
 
-    try {
-      await ensureWorkspaceMembership(workspace.id, "owner", user.id);
-    } catch {
-      // Legacy teams owners can still access their workspace via ownership fallback.
-    }
-    return workspace;
-  } catch (error: unknown) {
-    const recovered = await recoverWorkspaceAfterCreateFailure(
-      {
-        ...input,
-        inviteCode: normalizedCode,
-      },
-      user.id,
-    );
+  if (!normalizedCode) {
+    throw new Error("Invite code is required.");
+  }
 
-    if (recovered) {
-      return recovered;
-    }
+  await requireValidAuthSession();
 
-    if (!isMissingCollectionError(error)) {
-      throw error;
-    }
+  const body: {
+    name: string;
+    owner: string;
+    inviteCode: string;
+    description?: string;
+  } = {
+    name,
+    owner: user.id,
+    inviteCode: normalizedCode,
+  };
+
+  const description = input.description?.trim();
+  if (description) {
+    body.description = description;
   }
 
   let workspace: WorkspaceRecord;
@@ -326,16 +430,12 @@ export async function createWorkspace(input: CreateWorkspaceInput) {
   try {
     workspace = await pb
       .collection(collections.workspaces)
-      .create<WorkspaceRecord>({
-        name: input.name,
-        description: input.description,
-        owner: user.id,
-        inviteCode: normalizedCode,
-      });
+      .create<WorkspaceRecord>(body);
   } catch (error: unknown) {
     const recovered = await recoverWorkspaceAfterCreateFailure(
       {
         ...input,
+        name,
         inviteCode: normalizedCode,
       },
       user.id,
@@ -345,7 +445,7 @@ export async function createWorkspace(input: CreateWorkspaceInput) {
       return recovered;
     }
 
-    throw error;
+    throw new Error(formatPocketBaseRequestError(error));
   }
 
   try {
@@ -359,6 +459,9 @@ export async function createWorkspace(input: CreateWorkspaceInput) {
 
 export async function joinWorkspaceByInviteCode(inviteCode: string) {
   const user = requireCurrentUser();
+
+  await requireValidAuthSession();
+
   const workspace = await getWorkspaceByInviteCode(inviteCode);
   await ensureWorkspaceMembership(workspace.id, "member", user.id);
   return workspace;
@@ -386,7 +489,10 @@ export async function ensureWorkspaceMembership(
 
 export async function listWorkspaceMembers(workspaceId: string) {
   const currentUser = requireCurrentUser();
-  const accessMembership = await getWorkspaceMembership(workspaceId, currentUser.id);
+  const accessMembership = await getWorkspaceMembership(
+    workspaceId,
+    currentUser.id,
+  );
 
   const members = await pb
     .collection(collections.workspaceMembers)
@@ -403,7 +509,8 @@ export async function listWorkspaceMembers(workspaceId: string) {
     !members.some((member) => member.user === currentUser.id)
       ? [
           createOwnerMembership(
-            getMembershipWorkspace(accessMembership) ?? (await getWorkspace(workspaceId)),
+            getMembershipWorkspace(accessMembership) ??
+              (await getWorkspace(workspaceId)),
             currentUser,
           ),
         ]
@@ -441,6 +548,8 @@ export async function listWorkspaceDocumentsWithExpand(workspaceId: string) {
     });
 }
 
+const DEFAULT_DOCUMENT_CURRENT_CONTENT = "<p><br /></p>";
+
 export async function createDocument(input: CreateDocumentInput) {
   const user = requireCurrentUser();
   // Ensure the workspace exists and the user has access.
@@ -449,6 +558,10 @@ export async function createDocument(input: CreateDocumentInput) {
   const formData = new FormData();
   formData.append("workspace", input.workspaceId);
   formData.append("title", input.title);
+  formData.append(
+    "currentContent",
+    input.currentContent?.trim() || DEFAULT_DOCUMENT_CURRENT_CONTENT,
+  );
   formData.append("owner", user.id);
   formData.append("visibility", input.visibility ?? "workspace");
 
@@ -478,6 +591,9 @@ export async function updateDocument(
   const formData = new FormData();
   if (input.title !== undefined) formData.append("title", input.title);
   if (input.file !== undefined) formData.append("file", input.file);
+  if (input.currentContent !== undefined) {
+    formData.append("currentContent", input.currentContent);
+  }
   if (input.visibility !== undefined)
     formData.append("visibility", input.visibility);
   if (input.allowedMembers !== undefined) {
@@ -522,7 +638,7 @@ export async function listDocumentVersionsWithExpand(documentId: string) {
     });
 }
 
-export async function createDocumentVersion(input: CreateVersionInput) {
+export async function createDocumentVersion(input: CreateDocumentVersionInput) {
   const user = requireCurrentUser();
   const document = await pb
     .collection(collections.documents)
@@ -548,7 +664,7 @@ export async function createDocumentVersion(input: CreateVersionInput) {
       await pb
         .collection(collections.documentVersions)
         .delete(createdVersion.id);
-    await updateDocument(document.id, { title: document.title });
+      await updateDocument(document.id, { title: document.title });
     } catch {
       // Best-effort rollback only; preserve the original error below.
     }

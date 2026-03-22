@@ -19,7 +19,10 @@ export function Home() {
             updates across docs, chats, and task lists.
           </p>
           <div className="row gap-sm wrap">
-            <Link className="button-link" to={isAuthenticated ? "/dashboard" : "/login"}>
+            <Link
+              className="button-link"
+              to={isAuthenticated ? "/dashboard" : "/login"}
+            >
               Open workspace
             </Link>
             <Link className="button-link button-link-secondary" to="/about">

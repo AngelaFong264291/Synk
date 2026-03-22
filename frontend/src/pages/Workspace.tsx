@@ -30,7 +30,10 @@ function getInitials(value: string) {
     .join("");
 }
 
-function getWorkspaceInviteCode(workspace: { inviteCode?: string; code?: string }) {
+function getWorkspaceInviteCode(workspace: {
+  inviteCode?: string;
+  code?: string;
+}) {
   return workspace.inviteCode ?? workspace.code ?? "";
 }
 
@@ -62,20 +65,22 @@ export function Workspace() {
   const [createInviteCode, setCreateInviteCode] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
-  const [pendingAction, setPendingAction] = useState<"create" | "join" | null>(null);
+  const [pendingAction, setPendingAction] = useState<"create" | "join" | null>(
+    null,
+  );
   const workspaceCountLabel = `${workspaces.length} total`;
   const memberCountLabel = activeWorkspace
     ? `${members.length} member${members.length === 1 ? "" : "s"}`
     : "0 total";
 
   useEffect(() => {
-    if (!activeWorkspaceId) {
+    if (!activeWorkspace?.id) {
       setMembers([]);
       setMembersError(null);
       return;
     }
 
-    const workspaceId = activeWorkspaceId;
+    const workspaceId = activeWorkspace.id;
     let cancelled = false;
 
     async function loadMembers() {
@@ -107,7 +112,7 @@ export function Workspace() {
     return () => {
       cancelled = true;
     };
-  }, [activeWorkspaceId]);
+  }, [activeWorkspace?.id]);
 
   async function onCreateWorkspace(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -198,7 +203,10 @@ export function Workspace() {
         <section className="panel stack workspace-summary-card">
           <div className="row space-between wrap">
             <div className="row gap-sm">
-              <span className="workspace-card-icon workspace-card-icon-workspace" aria-hidden="true">
+              <span
+                className="workspace-card-icon workspace-card-icon-workspace"
+                aria-hidden="true"
+              >
                 <span className="workspace-card-icon-grid" />
               </span>
               <h2>Workspace switcher</h2>
@@ -236,7 +244,7 @@ export function Workspace() {
                 <p className="workspace-invite-code">
                   {getWorkspaceInviteCode(activeWorkspace)}
                 </p>
-              <p className="workspace-highlight-description">
+                <p className="workspace-highlight-description">
                   {activeWorkspace.description ||
                     "No description yet. Use this space to coordinate documents, tasks, and decisions."}
                 </p>
@@ -252,7 +260,10 @@ export function Workspace() {
         <section className="panel stack workspace-summary-card">
           <div className="row space-between wrap">
             <div className="row gap-sm">
-              <span className="workspace-card-icon workspace-card-icon-team" aria-hidden="true">
+              <span
+                className="workspace-card-icon workspace-card-icon-team"
+                aria-hidden="true"
+              >
                 <span className="workspace-card-icon-person workspace-card-icon-person-back" />
                 <span className="workspace-card-icon-person workspace-card-icon-person-front" />
               </span>
@@ -263,7 +274,9 @@ export function Workspace() {
             </StatusPill>
           </div>
 
-          {membersError ? <p className="error">{getFriendlyMembersError(membersError)}</p> : null}
+          {membersError ? (
+            <p className="error">{getFriendlyMembersError(membersError)}</p>
+          ) : null}
 
           {members.length ? (
             <div className="avatar-row">
@@ -281,15 +294,16 @@ export function Workspace() {
               })}
             </div>
           ) : (
-            <p className="muted">
-              Choose a workspace to see people and roles.
-            </p>
+            <p className="muted">Choose a workspace to see people and roles.</p>
           )}
         </section>
       </div>
 
       <div className="two-column workspace-form-grid">
-        <form className="panel stack workspace-form-card" onSubmit={onCreateWorkspace}>
+        <form
+          className="panel stack workspace-form-card"
+          onSubmit={onCreateWorkspace}
+        >
           <div className="row space-between wrap">
             <h2>Create a new workspace</h2>
             <StatusPill tone="accent">Owner flow</StatusPill>
@@ -319,7 +333,10 @@ export function Workspace() {
           </button>
         </form>
 
-        <form className="panel stack workspace-form-card" onSubmit={onJoinWorkspace}>
+        <form
+          className="panel stack workspace-form-card"
+          onSubmit={onJoinWorkspace}
+        >
           <div className="row space-between wrap">
             <h2>Join a workspace</h2>
             <StatusPill tone="accent">Invite flow</StatusPill>

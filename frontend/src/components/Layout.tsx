@@ -75,10 +75,7 @@ export function Layout() {
           {isAuthenticated ? (
             <>
               {workspaces.length ? (
-                <div
-                  ref={workspaceMenuRef}
-                  className="workspace-menu"
-                >
+                <div ref={workspaceMenuRef} className="workspace-menu">
                   <button
                     type="button"
                     className="workspace-chip workspace-chip-button"
@@ -86,7 +83,9 @@ export function Layout() {
                     aria-haspopup="menu"
                     aria-expanded={workspaceMenuOpen}
                   >
-                    <span className="workspace-chip-label">Active workspace</span>
+                    <span className="workspace-chip-label">
+                      Active workspace
+                    </span>
                     <span className="workspace-chip-current">
                       <strong>
                         {activeWorkspace?.name ?? "Choose workspace"}
