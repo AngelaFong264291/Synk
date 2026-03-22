@@ -1,20 +1,18 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { createDocument, listWorkspaceDocuments } from "../lib/api";
 import { useActiveWorkspace } from "../lib/useActiveWorkspace";
 import type { DocumentRecord } from "../lib/types";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill } from "../components/StatusPill";
+import parseDOCX from "../parsing/parseDOCX.js";
 
 export function Documents() {
   const { activeWorkspace } = useActiveWorkspace();
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-  const [pendingCreate, setPendingCreate] = useState(false);
+  const [pendingUpload, setPendingUpload] = useState(false);
 
   useEffect(() => {
     if (!activeWorkspace) {
@@ -57,34 +55,38 @@ export function Documents() {
     };
   }, [activeWorkspace]);
 
-  async function onCreateDocument(event: FormEvent) {
-    event.preventDefault();
+  async function onDocxUpload(
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
 
-    if (!activeWorkspace) {
+    if (!file || !activeWorkspace) {
       return;
     }
 
-    setPendingCreate(true);
+    setPendingUpload(true);
     setError(null);
 
     try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const parsedContent = await parseDOCX(bytes);
+
       const nextDocument = await createDocument({
         workspaceId: activeWorkspace.id,
-        title,
-        currentContent: content,
+        title: file.name.replace(/\.docx$/i, ""),
+        currentContent: parsedContent,
       });
 
       setDocuments((current) => [nextDocument, ...current]);
-      setTitle("");
-      setContent("");
-    } catch (createError: unknown) {
+    } catch (uploadError: unknown) {
       setError(
-        createError instanceof Error
-          ? createError.message
-          : "Unable to create document",
+        uploadError instanceof Error
+          ? uploadError.message
+          : "Unable to upload document",
       );
     } finally {
-      setPendingCreate(false);
+      setPendingUpload(false);
     }
   }
 
@@ -103,39 +105,27 @@ export function Documents() {
       {error ? <p className="error">{error}</p> : null}
 
       <div className="two-column">
-        <form className="panel stack" onSubmit={onCreateDocument}>
+        <form className="panel stack">
           <div className="row space-between wrap">
-            <h2>New document</h2>
+            <h2>Upload document</h2>
             <StatusPill tone="accent">
-              {activeWorkspace ? "Live create" : "Needs workspace"}
+              {activeWorkspace ? "Live upload" : "Needs workspace"}
             </StatusPill>
           </div>
 
           <label className="field">
-            <span>Title</span>
+            <span>Select DOCX file</span>
             <input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="Launch brief"
-              required
-              disabled={!activeWorkspace}
+              type="file"
+              accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              onChange={onDocxUpload}
+              disabled={!activeWorkspace || pendingUpload}
             />
           </label>
 
-          <label className="field">
-            <span>Initial content</span>
-            <textarea
-              className="textarea"
-              value={content}
-              onChange={(event) => setContent(event.target.value)}
-              placeholder="Write the first version of the document here..."
-              disabled={!activeWorkspace}
-            />
-          </label>
-
-          <button type="submit" disabled={!activeWorkspace || pendingCreate}>
-            {pendingCreate ? "Creating..." : "Create document"}
-          </button>
+          <p className="muted">
+            The uploaded .docx file will be parsed and saved as a new document immediately.
+          </p>
         </form>
 
         <section className="panel stack">
@@ -193,7 +183,7 @@ export function Documents() {
 
         {!loading && activeWorkspace && documents.length === 0 ? (
           <p className="muted">
-            No documents yet. Create your first one to start the snapshot flow.
+            No documents yet. Upload your first DOCX to start the snapshot flow.
           </p>
         ) : null}
       </div>
