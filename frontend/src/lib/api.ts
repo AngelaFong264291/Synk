@@ -3,9 +3,13 @@ import { collections } from "./types";
 import type {
   DashboardSnapshot,
   DecisionRecord,
+  DecisionRecordWithExpand,
   DocumentRecord,
+  DocumentRecordWithExpand,
   DocumentVersionRecord,
+  DocumentVersionRecordWithExpand,
   TaskRecord,
+  TaskRecordWithExpand,
   TaskStatus,
   UserRecord,
   WorkspaceMemberWithExpand,
@@ -134,6 +138,11 @@ export function getCurrentUser() {
   return pb.authStore.record as UserRecord | null;
 }
 
+export async function getDefaultWorkspace() {
+  const workspaces = await listMyWorkspaces();
+  return workspaces[0] ?? null;
+}
+
 export async function listMyWorkspaces() {
   const user = requireCurrentUser();
 
@@ -184,9 +193,7 @@ export async function createWorkspace(input: CreateWorkspaceInput) {
 export async function joinWorkspaceByInviteCode(inviteCode: string) {
   const user = requireCurrentUser();
   const workspace = await getWorkspaceByInviteCode(inviteCode);
-
   await ensureWorkspaceMembership(workspace.id, "member", user.id);
-
   return workspace;
 }
 
@@ -239,6 +246,16 @@ export async function listWorkspaceDocuments(workspaceId: string) {
   });
 }
 
+export async function listWorkspaceDocumentsWithExpand(workspaceId: string) {
+  await getWorkspaceMembership(workspaceId);
+
+  return pb.collection(collections.documents).getFullList<DocumentRecordWithExpand>({
+    filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
+    sort: "-updated",
+    expand: "owner",
+  });
+}
+
 export async function createDocument(input: CreateDocumentInput) {
   const user = requireCurrentUser();
   await getWorkspaceMembership(input.workspaceId, user.id);
@@ -279,6 +296,22 @@ export async function listDocumentVersions(documentId: string) {
   });
 }
 
+export async function listDocumentVersionsWithExpand(documentId: string) {
+  const document = await pb
+    .collection(collections.documents)
+    .getOne<DocumentRecord>(documentId);
+
+  await getWorkspaceMembership(document.workspace);
+
+  return pb
+    .collection(collections.documentVersions)
+    .getFullList<DocumentVersionRecordWithExpand>({
+      filter: pb.filter("document = {:document}", { document: documentId }),
+      sort: "-created",
+      expand: "author",
+    });
+}
+
 export async function createDocumentVersion(input: CreateVersionInput) {
   const user = requireCurrentUser();
   const document = await pb
@@ -287,14 +320,29 @@ export async function createDocumentVersion(input: CreateVersionInput) {
 
   await getWorkspaceMembership(document.workspace, user.id);
 
-  await updateDocument(document.id, { currentContent: input.content });
+  const previousContent = document.currentContent;
+  const createdVersion = await pb
+    .collection(collections.documentVersions)
+    .create<DocumentVersionRecord>({
+      document: document.id,
+      versionName: input.versionName,
+      content: input.content,
+      author: user.id,
+    });
 
-  return pb.collection(collections.documentVersions).create<DocumentVersionRecord>({
-    document: document.id,
-    versionName: input.versionName,
-    content: input.content,
-    author: user.id,
-  });
+  try {
+    await updateDocument(document.id, { currentContent: input.content });
+    return createdVersion;
+  } catch (error: unknown) {
+    try {
+      await pb.collection(collections.documentVersions).delete(createdVersion.id);
+      await updateDocument(document.id, { currentContent: previousContent });
+    } catch {
+      // Best-effort rollback only; preserve the original error below.
+    }
+
+    throw error;
+  }
 }
 
 export async function listWorkspaceTasks(workspaceId: string) {
@@ -303,6 +351,16 @@ export async function listWorkspaceTasks(workspaceId: string) {
   return pb.collection(collections.tasks).getFullList<TaskRecord>({
     filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
     sort: "dueDate",
+  });
+}
+
+export async function listWorkspaceTasksWithExpand(workspaceId: string) {
+  await getWorkspaceMembership(workspaceId);
+
+  return pb.collection(collections.tasks).getFullList<TaskRecordWithExpand>({
+    filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
+    sort: "dueDate",
+    expand: "assignee,document",
   });
 }
 
@@ -340,6 +398,16 @@ export async function listWorkspaceDecisions(workspaceId: string) {
   });
 }
 
+export async function listWorkspaceDecisionsWithExpand(workspaceId: string) {
+  await getWorkspaceMembership(workspaceId);
+
+  return pb.collection(collections.decisions).getFullList<DecisionRecordWithExpand>({
+    filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
+    sort: "-decidedAt",
+    expand: "owner,linkedTask,linkedDocument",
+  });
+}
+
 export async function createDecision(input: CreateDecisionInput) {
   const user = requireCurrentUser();
   await getWorkspaceMembership(input.workspaceId, user.id);
@@ -359,26 +427,89 @@ export async function createDecision(input: CreateDecisionInput) {
 export async function getDashboardSnapshot(workspaceId: string): Promise<DashboardSnapshot> {
   await getWorkspaceMembership(workspaceId);
 
-  const [workspace, members, tasks, recentVersions, recentDecisions] =
+  const documents = await listWorkspaceDocumentsWithExpand(workspaceId);
+  const documentIds = documents.map((document) => document.id);
+  const recentVersions = documentIds.length
+    ? (
+        await Promise.all(
+          documentIds.map((documentId) => listDocumentVersions(documentId)),
+        )
+      )
+        .flat()
+        .sort((left, right) => right.created.localeCompare(left.created))
+    : [];
+
+  const [workspace, members, tasks, recentDecisions] =
     await Promise.all([
       getWorkspace(workspaceId),
       listWorkspaceMembers(workspaceId),
       listWorkspaceTasks(workspaceId),
-      pb.collection(collections.documentVersions).getFullList<DocumentVersionRecord>({
-        filter: pb.filter("document.workspace = {:workspace}", {
-          workspace: workspaceId,
-        }),
-        sort: "-created",
-        requestKey: null,
-      }),
       listWorkspaceDecisions(workspaceId),
     ]);
 
   return {
     workspace,
     members,
+    documents,
     tasks,
     recentVersions: recentVersions.slice(0, 10),
     recentDecisions: recentDecisions.slice(0, 10),
+  };
+}
+
+export async function getDocumentBundle(documentId: string) {
+  const document = await pb
+    .collection(collections.documents)
+    .getOne<DocumentRecordWithExpand>(documentId, {
+      expand: "owner",
+    });
+
+  await getWorkspaceMembership(document.workspace);
+
+  const [versions, linkedTasks] = await Promise.all([
+    listDocumentVersionsWithExpand(documentId),
+    pb.collection(collections.tasks).getFullList<TaskRecordWithExpand>({
+      filter: pb.filter("document = {:document}", { document: documentId }),
+      sort: "dueDate",
+      expand: "assignee,document",
+    }),
+  ]);
+
+  return {
+    document,
+    versions,
+    linkedTasks,
+  };
+}
+
+export async function getWorkspaceDashboardBundle(workspaceId?: string) {
+  const targetWorkspace =
+    workspaceId ? await getWorkspace(workspaceId) : await getDefaultWorkspace();
+
+  if (!targetWorkspace) {
+    throw new Error("No workspace found for current user");
+  }
+
+  const [members, documents, tasks, decisions] = await Promise.all([
+    listWorkspaceMembers(targetWorkspace.id),
+    listWorkspaceDocumentsWithExpand(targetWorkspace.id),
+    listWorkspaceTasksWithExpand(targetWorkspace.id),
+    listWorkspaceDecisionsWithExpand(targetWorkspace.id),
+  ]);
+
+  const versionsByDocument = await Promise.all(
+    documents.map(async (document) => ({
+      documentId: document.id,
+      versions: await listDocumentVersionsWithExpand(document.id),
+    })),
+  );
+
+  return {
+    workspace: targetWorkspace,
+    members,
+    documents,
+    tasks,
+    decisions,
+    versionsByDocument,
   };
 }

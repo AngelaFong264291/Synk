@@ -49,6 +49,12 @@ export type WorkspaceMemberWithExpand = WorkspaceMemberRecord & {
   };
 };
 
+export type DocumentRecordWithExpand = DocumentRecord & {
+  expand?: {
+    owner?: UserRecord;
+  };
+};
+
 export type DocumentRecord = BaseRecord & {
   workspace: string;
   title: string;
@@ -65,6 +71,12 @@ export type DocumentVersionRecord = BaseRecord & {
   author: string;
 };
 
+export type DocumentVersionRecordWithExpand = DocumentVersionRecord & {
+  expand?: {
+    author?: UserRecord;
+  };
+};
+
 export type TaskRecord = BaseRecord & {
   workspace: string;
   title: string;
@@ -73,6 +85,13 @@ export type TaskRecord = BaseRecord & {
   dueDate?: ISODateString;
   status: TaskStatus;
   document?: string;
+};
+
+export type TaskRecordWithExpand = TaskRecord & {
+  expand?: {
+    assignee?: UserRecord;
+    document?: DocumentRecord;
+  };
 };
 
 export type DecisionRecord = BaseRecord & {
@@ -86,9 +105,18 @@ export type DecisionRecord = BaseRecord & {
   decidedAt: ISODateString;
 };
 
+export type DecisionRecordWithExpand = DecisionRecord & {
+  expand?: {
+    owner?: UserRecord;
+    linkedTask?: TaskRecord;
+    linkedDocument?: DocumentRecord;
+  };
+};
+
 export type DashboardSnapshot = {
   workspace: WorkspaceRecord;
   members: WorkspaceMemberWithExpand[];
+  documents: DocumentRecordWithExpand[];
   tasks: TaskRecord[];
   recentVersions: DocumentVersionRecord[];
   recentDecisions: DecisionRecord[];

@@ -1,13 +1,51 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useState, type FormEvent } from "react";
 import { useAuth } from "../auth/useAuth";
 import { pb } from "../lib/pocketbase";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill } from "../components/StatusPill";
-import { decisions, documents, tasks, workspace } from "../lib/demo-data";
+import { useActiveWorkspace } from "../lib/useActiveWorkspace";
+import type { DashboardViewModel } from "../lib/view-models";
+import { loadDashboardViewModel } from "../lib/view-models";
+import { createDashboardSummary } from "../lib/summary";
 
 export function Dashboard() {
   const { model } = useAuth();
+  const { activeWorkspaceId } = useActiveWorkspace();
+  const [data, setData] = useState<DashboardViewModel | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      const next = await loadDashboardViewModel(activeWorkspaceId ?? undefined);
+
+      if (!cancelled) {
+        setData(next);
+      }
+    }
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWorkspaceId]);
+
+  if (!data) {
+    return (
+      <section className="stack-lg">
+        <PageHeader
+          eyebrow="Dashboard"
+          title={`Welcome back, ${model?.email ?? "teammate"}`}
+          description="Loading your workspace summary, recent activity, and live demo signals."
+        />
+      </section>
+    );
+  }
+
+  const { decisions, documents, members, tasks, workspace, source } = data;
   const openTasks = tasks.filter((task) => task.status !== "Done");
   const [inviteCode, setInviteCode] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
@@ -53,7 +91,7 @@ export function Dashboard() {
 
     try {
       if (!model?.id) throw new Error("Not logged in");
-      
+
       const teams = await pb.collection('teams').getList(1, 1, {
         filter: `code = "${inviteCode}"`
       });
@@ -75,9 +113,9 @@ export function Dashboard() {
         return;
       }
 
-      await pb.collection('team_members').create({ 
-        user: model.id, 
-        team: team.id 
+      await pb.collection('team_members').create({
+        user: model.id,
+        team: team.id
       });
 
       setJoinStatus(`Successfully joined team: ${team.name}`);
@@ -110,8 +148,8 @@ export function Dashboard() {
 
       const teamId = myTeams.items[0].team;
 
-      await pb.collection('team_invites').create({ 
-        email: inviteEmail, 
+      await pb.collection('team_invites').create({
+        email: inviteEmail,
         inviter: model.id,
         team: teamId
       });
@@ -125,6 +163,13 @@ export function Dashboard() {
       setIsInviting(false);
     }
   }
+  const summary = createDashboardSummary({
+    workspace,
+    documents,
+    tasks,
+    decisions,
+    members,
+  });
 
   return (
     <section className="stack-lg">
@@ -143,6 +188,19 @@ export function Dashboard() {
           </div>
         }
       />
+
+      {source === "demo" ? (
+        <div className="panel">
+          <p className="muted">
+            Showing demo fallback data.
+          </p>
+          <p className="muted">
+            {data.error
+              ? `Live PocketBase data failed to load: ${data.error}`
+              : "PocketBase collections and seed data are not available for this user yet."}
+          </p>
+        </div>
+      ) : null}
 
       <div className="stats-grid">
         <article className="stat-card">
@@ -165,15 +223,12 @@ export function Dashboard() {
             <h2>Project summary</h2>
             <StatusPill tone="accent">{workspace.focus}</StatusPill>
           </div>
-          <p>
-            The team is building one clear demo flow: onboard, edit a document,
-            save a named version, compare changes, assign a task, and log a
-            decision.
-          </p>
-          <p className="muted">
-            Next step: replace this demo summary with Person 3&apos;s AI
-            changelog layer.
-          </p>
+          <p>{summary.headline}</p>
+          {summary.narrative.map((sentence) => (
+            <p key={sentence} className="muted">
+              {sentence}
+            </p>
+          ))}
         </section>
 
         <section className="panel stack">
@@ -190,6 +245,53 @@ export function Dashboard() {
               <span className="muted">{decision.date}</span>
             </div>
           ))}
+        </section>
+      </div>
+
+      <div className="two-column">
+        <section className="panel stack">
+          <div className="row space-between wrap">
+            <h2>Recent activity</h2>
+            <StatusPill tone="accent">Auto-generated</StatusPill>
+          </div>
+          {summary.recentActivity.map((item) => (
+            <article key={`${item.type}-${item.id}`} className="timeline-item">
+              <div className="row space-between wrap gap-sm">
+                <strong>{item.label}</strong>
+                <span className="muted">{item.timestamp}</span>
+              </div>
+              <p>{item.detail}</p>
+              <p className="muted">
+                {item.actor} • {item.type}
+              </p>
+            </article>
+          ))}
+        </section>
+
+        <section className="panel stack">
+          <div className="row space-between wrap">
+            <h2>Contributors</h2>
+            <StatusPill
+              tone={summary.overdueTasks.length ? "warning" : "success"}
+            >
+              {summary.overdueTasks.length
+                ? `${summary.overdueTasks.length} due today`
+                : "On track"}
+            </StatusPill>
+          </div>
+          <div className="panel-list compact-grid">
+            {summary.contributorStats.map((member) => (
+              <article key={member.name} className="task-card">
+                <div className="row space-between gap-sm">
+                  <strong>{member.name}</strong>
+                  <StatusPill tone="accent">
+                    {member.contributions} updates
+                  </StatusPill>
+                </div>
+                <p>{member.focus}</p>
+              </article>
+            ))}
+          </div>
         </section>
       </div>
 
