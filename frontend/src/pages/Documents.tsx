@@ -157,40 +157,53 @@ export function Documents() {
 
       <div className="stats-grid documents-kpi-grid">
         <article className="stat-card documents-kpi-card">
-          <div
-            className="documents-kpi-icon documents-kpi-icon-docs"
-            aria-hidden="true"
-          >
-            <span className="documents-kpi-glyph">⌕</span>
+          <div className="documents-kpi-top">
+            <div
+              className="documents-kpi-icon documents-kpi-icon-docs"
+              aria-hidden="true"
+            >
+              <span className="documents-kpi-doc-icon">
+                <span className="documents-kpi-doc-line documents-kpi-doc-line-top" />
+                <span className="documents-kpi-doc-line documents-kpi-doc-line-middle" />
+                <span className="documents-kpi-doc-line documents-kpi-doc-line-bottom" />
+              </span>
+            </div>
+            <span className="documents-kpi-label">Documents</span>
           </div>
-          <div>
-            <strong className="stat-value">{documents.length}</strong>
-            <p>Tracked documents</p>
-          </div>
+          <strong className="documents-kpi-value">{documents.length}</strong>
+          <p>Tracked documents</p>
         </article>
         <article className="stat-card documents-kpi-card">
-          <div
-            className="documents-kpi-icon documents-kpi-icon-snapshot"
-            aria-hidden="true"
-          >
-            <span className="documents-kpi-glyph">▣</span>
+          <div className="documents-kpi-top">
+            <div
+              className="documents-kpi-icon documents-kpi-icon-snapshot"
+              aria-hidden="true"
+            >
+              <span className="documents-kpi-camera-icon">
+                <span className="documents-kpi-camera-top" />
+                <span className="documents-kpi-camera-lens" />
+              </span>
+            </div>
+            <span className="documents-kpi-label">Snapshots</span>
           </div>
-          <div>
-            <strong className="stat-value">{snapshotReadyCount}</strong>
-            <p>Snapshot-ready records</p>
-          </div>
+          <strong className="documents-kpi-value">{snapshotReadyCount}</strong>
+          <p>Snapshot-ready records</p>
         </article>
         <article className="stat-card documents-kpi-card">
-          <div
-            className="documents-kpi-icon documents-kpi-icon-contributors"
-            aria-hidden="true"
-          >
-            <span className="documents-kpi-glyph">◔</span>
+          <div className="documents-kpi-top">
+            <div
+              className="documents-kpi-icon documents-kpi-icon-contributors"
+              aria-hidden="true"
+            >
+              <span className="documents-kpi-people-icon">
+                <span className="documents-kpi-person documents-kpi-person-back" />
+                <span className="documents-kpi-person documents-kpi-person-front" />
+              </span>
+            </div>
+            <span className="documents-kpi-label">Contributors</span>
           </div>
-          <div>
-            <strong className="stat-value">{uniqueOwners}</strong>
-            <p>Visible contributors</p>
-          </div>
+          <strong className="documents-kpi-value">{uniqueOwners}</strong>
+          <p>Visible contributors</p>
         </article>
       </div>
 

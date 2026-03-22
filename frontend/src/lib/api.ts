@@ -159,6 +159,10 @@ async function getOwnedWorkspace(workspaceId: string, userId: string) {
   }
 }
 
+async function getUserById(userId: string) {
+  return pb.collection(collections.users).getOne<UserRecord>(userId);
+}
+
 function createOwnerMembership(
   workspace: WorkspaceRecord,
   user: UserRecord,
@@ -193,12 +197,18 @@ async function getWorkspaceMembership(workspaceId: string, userId?: string) {
   const ownedTeam = await getOwnedTeam(workspaceId, currentUserId);
   const ownedWorkspace = await getOwnedWorkspace(workspaceId, currentUserId);
 
-  if (ownedTeam && currentUser && ownedTeam.owner === currentUser.id) {
-    return createOwnerMembership(ownedTeam, currentUser);
+  if (ownedTeam && ownedTeam.owner === currentUserId) {
+    return createOwnerMembership(
+      ownedTeam,
+      currentUser ?? (await getUserById(currentUserId)),
+    );
   }
 
-  if (ownedWorkspace && currentUser && ownedWorkspace.owner === currentUser.id) {
-    return createOwnerMembership(ownedWorkspace, currentUser);
+  if (ownedWorkspace && ownedWorkspace.owner === currentUserId) {
+    return createOwnerMembership(
+      ownedWorkspace,
+      currentUser ?? (await getUserById(currentUserId)),
+    );
   }
 
   try {
@@ -500,7 +510,7 @@ export async function listWorkspaceDocumentsWithExpand(workspaceId: string) {
 
 export async function createDocument(input: CreateDocumentInput) {
   const user = requireCurrentUser();
-  await getWorkspaceMembership(input.workspaceId, user.id);
+  await getWorkspaceMembership(input.workspaceId);
 
   return pb.collection(collections.documents).create<DocumentRecord>({
     workspace: input.workspaceId,
@@ -564,7 +574,7 @@ export async function createDocumentVersion(input: CreateVersionInput) {
     .collection(collections.documents)
     .getOne<DocumentRecord>(input.documentId);
 
-  await getWorkspaceMembership(document.workspace, user.id);
+  await getWorkspaceMembership(document.workspace);
 
   const previousContent = document.currentContent;
   const createdVersion = await pb
@@ -662,7 +672,7 @@ export async function listWorkspaceDecisionsWithExpand(workspaceId: string) {
 
 export async function createDecision(input: CreateDecisionInput) {
   const user = requireCurrentUser();
-  await getWorkspaceMembership(input.workspaceId, user.id);
+  await getWorkspaceMembership(input.workspaceId);
 
   return pb.collection(collections.decisions).create<DecisionRecord>({
     workspace: input.workspaceId,

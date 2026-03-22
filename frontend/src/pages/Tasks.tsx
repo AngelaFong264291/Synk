@@ -30,6 +30,18 @@ function formatTaskStatus(status: TaskStatus) {
   return "To Do";
 }
 
+function getColumnHint(status: TaskStatus) {
+  if (status === "in_progress") {
+    return "Items actively moving through the workflow";
+  }
+
+  if (status === "done") {
+    return "Completed work ready to reference in the demo";
+  }
+
+  return "Assigned work waiting for someone to pick it up";
+}
+
 function getMemberLabel(member: WorkspaceMemberWithExpand) {
   return member.expand?.user?.name || member.expand?.user?.email || member.user;
 }
@@ -60,6 +72,23 @@ function getDocumentTitle(
   );
 }
 
+function formatDueDate(value: string | undefined) {
+  if (!value) {
+    return "No due date";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return `Due ${value}`;
+  }
+
+  return `Due ${new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(date)}`;
+}
+
 export function Tasks() {
   const { activeWorkspace } = useActiveWorkspace();
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
@@ -71,7 +100,6 @@ export function Tasks() {
   const [title, setTitle] = useState("");
   const [selectedAssignee, setSelectedAssignee] = useState("");
   const [selectedDocument, setSelectedDocument] = useState("");
-  const [selectedStatus, setSelectedStatus] = useState<TaskStatus>("todo");
   const [dueDate, setDueDate] = useState("");
   const [pendingCreate, setPendingCreate] = useState(false);
 
@@ -141,7 +169,6 @@ export function Tasks() {
         title,
         assignee: selectedAssignee || undefined,
         document: selectedDocument || undefined,
-        status: selectedStatus,
         dueDate: dueDate || undefined,
       });
 
@@ -149,7 +176,6 @@ export function Tasks() {
       setTitle("");
       setSelectedAssignee("");
       setSelectedDocument("");
-      setSelectedStatus("todo");
       setDueDate("");
     } catch (createError: unknown) {
       setError(
@@ -244,21 +270,6 @@ export function Tasks() {
           </label>
 
           <label className="field">
-            <span>Status</span>
-            <select
-              value={selectedStatus}
-              onChange={(event) =>
-                setSelectedStatus(event.target.value as TaskStatus)
-              }
-              disabled={!activeWorkspace}
-            >
-              <option value="todo">To Do</option>
-              <option value="in_progress">In Progress</option>
-              <option value="done">Done</option>
-            </select>
-          </label>
-
-          <label className="field">
             <span>Due date</span>
             <input
               type="date"
@@ -282,13 +293,14 @@ export function Tasks() {
           </div>
           <p>
             The task system now centers on the three workflow states the
-            workspace
+            team
             asked for: <strong>To Do</strong>, <strong>In Progress</strong>, and{" "}
             <strong>Done</strong>.
           </p>
           <p className="muted">
-            Use the buttons inside each task card to move work between columns
-            during the demo.
+            New tasks start in <strong>To Do</strong>. Assign an owner when you
+            create the task, then use the buttons inside each task card to move
+            work between columns during the demo.
           </p>
         </section>
       </div>
@@ -302,32 +314,47 @@ export function Tasks() {
             <StatusPill tone="accent">{tasks.length} total</StatusPill>
           </div>
 
-          <div className="board">
+          <div className="board board-polished">
             {columns.map((column) => {
               const columnTasks = tasks.filter((task) => task.status === column);
 
               return (
-                <section key={column} className="board-column">
-                  <div className="row space-between wrap gap-sm">
-                    <h3>{formatTaskStatus(column)}</h3>
-                    <StatusPill
-                      tone={
-                        column === "done"
-                          ? "success"
-                          : column === "in_progress"
-                            ? "accent"
-                            : "neutral"
-                      }
-                    >
-                      {columnTasks.length}
-                    </StatusPill>
+                <section
+                  key={column}
+                  className={`board-column board-column-${column.replace("_", "-")}`}
+                >
+                  <div className="board-column-top">
+                    <div className="row space-between wrap gap-sm">
+                      <div className="stack board-column-heading">
+                        <p className="board-column-label">
+                          {column === "todo"
+                            ? "Queue"
+                            : column === "in_progress"
+                              ? "Active"
+                              : "Delivered"}
+                        </p>
+                        <h3>{formatTaskStatus(column)}</h3>
+                      </div>
+                      <StatusPill
+                        tone={
+                          column === "done"
+                            ? "success"
+                            : column === "in_progress"
+                              ? "accent"
+                              : "neutral"
+                        }
+                      >
+                        {columnTasks.length}
+                      </StatusPill>
+                    </div>
+                    <p className="board-column-hint">{getColumnHint(column)}</p>
                   </div>
 
-                  <div className="stack">
+                  <div className="stack board-column-body">
                     {columnTasks.map((task) => (
-                      <article key={task.id} className="task-card">
-                        <div className="row space-between gap-sm wrap">
-                          <div>
+                      <article key={task.id} className="task-card task-card-polished">
+                        <div className="row space-between gap-sm wrap task-card-top">
+                          <div className="stack task-card-copy">
                             <strong>{task.title}</strong>
                             <p>{getDocumentTitle(task.document, documents)}</p>
                           </div>
@@ -344,14 +371,18 @@ export function Tasks() {
                           </StatusPill>
                         </div>
 
-                        <div className="meta-grid">
-                          <span>{getAssigneeLabel(task.assignee, members)}</span>
-                          <span>
-                            {task.dueDate ? `Due ${task.dueDate}` : "No due date"}
-                          </span>
+                        <div className="task-card-meta">
+                          <div className="task-meta-pill">
+                            <span className="task-meta-label">Owner</span>
+                            <strong>{getAssigneeLabel(task.assignee, members)}</strong>
+                          </div>
+                          <div className="task-meta-pill">
+                            <span className="task-meta-label">Deadline</span>
+                            <strong>{formatDueDate(task.dueDate)}</strong>
+                          </div>
                         </div>
 
-                        <div className="row gap-sm wrap">
+                        <div className="row gap-sm wrap task-card-actions">
                           {task.status !== "todo" ? (
                             <button
                               type="button"
@@ -386,9 +417,15 @@ export function Tasks() {
                     ))}
 
                     {!columnTasks.length ? (
-                      <p className="muted">
-                        No tasks in {formatTaskStatus(column).toLowerCase()} yet.
-                      </p>
+                      <div className="board-empty-state">
+                        <span className="board-empty-dot" aria-hidden="true" />
+                        <div className="stack">
+                          <strong>No tasks yet</strong>
+                          <p className="muted">
+                            Nothing in {formatTaskStatus(column).toLowerCase()} yet.
+                          </p>
+                        </div>
+                      </div>
                     ) : null}
                   </div>
                 </section>

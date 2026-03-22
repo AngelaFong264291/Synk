@@ -35,6 +35,14 @@ function getWorkspaceInviteCode(workspace: { inviteCode?: string; code?: string 
   return workspace.inviteCode ?? workspace.code ?? "";
 }
 
+function getFriendlyMembersError(message: string) {
+  if (message.toLowerCase().includes("requested resource wasn't found")) {
+    return "No workspace member records yet. You can still keep working while membership sync catches up.";
+  }
+
+  return message;
+}
+
 export function Workspace() {
   const {
     workspaces,
@@ -152,9 +160,9 @@ export function Workspace() {
           <p className="eyebrow">Workspaces</p>
           <h1>Your Workspaces</h1>
           <p className="workspace-hero-text">
-            Each workspace is a team space. Owners create one with a name and
-            invite code, then teammates join with that code to collaborate on
-            documents, tasks, and decisions in one place.
+            Create a workspace, share one invite code, and keep documents,
+            tasks, and decisions moving in the same place without losing the
+            handoff.
           </p>
         </div>
         <div className="workspace-hero-illustration" aria-hidden="true">
@@ -171,7 +179,7 @@ export function Workspace() {
             <span className="workspace-illustration-dot workspace-illustration-dot-accent" />
             <div className="stack">
               <strong>Invite flow</strong>
-              <p>Bring teammates in with one code.</p>
+              <p>Bring collaborators in with one code.</p>
             </div>
           </div>
           <div className="workspace-figure">
@@ -215,21 +223,24 @@ export function Workspace() {
             </label>
           ) : (
             <p className="muted">
-              No team workspace yet. Create one below or join with an invite code.
+              No workspace yet. Create one below or join with an invite code.
             </p>
           )}
 
           {activeWorkspace ? (
             <div className="workspace-highlight-card">
-              <div className="stack">
-                <p className="eyebrow">Invite code</p>
+              <div className="stack workspace-highlight-copy">
+                <p className="eyebrow">Active workspace</p>
                 <h3>{activeWorkspace.name}</h3>
                 <p className="workspace-invite-code">
                   {getWorkspaceInviteCode(activeWorkspace)}
                 </p>
-                <p>{activeWorkspace.description || "No description yet."}</p>
+                <p className="workspace-highlight-description">
+                  {activeWorkspace.description ||
+                    "No description yet. Use this space to coordinate documents, tasks, and decisions."}
+                </p>
               </div>
-              <div className="row wrap gap-sm">
+              <div className="row wrap gap-sm workspace-highlight-actions">
                 <Link className="button-link" to="/documents">
                   Open documents
                 </Link>
@@ -248,14 +259,14 @@ export function Workspace() {
                 <span className="workspace-card-icon-person workspace-card-icon-person-back" />
                 <span className="workspace-card-icon-person workspace-card-icon-person-front" />
               </span>
-              <h2>Team members</h2>
+              <h2>Workspace members</h2>
             </div>
             <StatusPill tone={membersError ? "warning" : "success"}>
               {membersLoading ? "Loading" : memberCountLabel}
             </StatusPill>
           </div>
 
-          {membersError ? <p className="error">{membersError}</p> : null}
+          {membersError ? <p className="error">{getFriendlyMembersError(membersError)}</p> : null}
 
           {members.length ? (
             <div className="avatar-row">
@@ -274,7 +285,7 @@ export function Workspace() {
             </div>
           ) : (
             <p className="muted">
-              Choose a workspace to see teammates and membership.
+              Choose a workspace to see people and roles.
             </p>
           )}
         </section>
@@ -283,7 +294,7 @@ export function Workspace() {
       <div className="two-column workspace-form-grid">
         <form className="panel stack workspace-form-card" onSubmit={onCreateWorkspace}>
           <div className="row space-between wrap">
-            <h2>Create a new team workspace</h2>
+            <h2>Create a new workspace</h2>
             <StatusPill tone="accent">Owner flow</StatusPill>
           </div>
           <label className="field">
@@ -313,7 +324,7 @@ export function Workspace() {
 
         <form className="panel stack workspace-form-card" onSubmit={onJoinWorkspace}>
           <div className="row space-between wrap">
-            <h2>Join a team workspace</h2>
+            <h2>Join a workspace</h2>
             <StatusPill tone="accent">Invite flow</StatusPill>
           </div>
           <label className="field">
