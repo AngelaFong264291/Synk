@@ -1,71 +1,52 @@
 const parseXML = (xml) => {
-
-  const tags = xml
-    .replaceAll("<", ">")
-    .split(">")
-    .map(c => c.trim().length === 0 ? "" : c);
-
   const stack = [{ _children: [] }];
+  const tagRegex = /<([^>]+)>/g;
+  let match;
+  let lastIndex = 0;
 
-  for (let i = 0; i < tags.length; i ++) {
-
-    let tag = tags[i];
-
-    let closeImmediately = false;
-    if (tag.endsWith("/")) {
-      tag = tag.slice(0, -1);
-      closeImmediately = true;
+  while ((match = tagRegex.exec(xml)) !== null) {
+    const text = xml.slice(lastIndex, match.index).trim();
+    if (text) {
+      stack.at(-1)._children.push(text);
     }
 
-    const isLabel = i % 2;
-    const values = tag
-      .split('"')
-      .map((c, i) => {
-        return i % 2 ? c :
-        (c.replaceAll("\n", " ")
-          .replaceAll("\t", " ")
-          .split(" ")
-          .filter(c => c.length !== 0));
-      }).flat();
-
-    if (isLabel && values[0].startsWith("?")) continue;
-
-    if (isLabel && values[0].startsWith("/")) {
-      stack.pop();
+    const tagContent = match[1];
+    if (tagContent.startsWith("?")) {
+      lastIndex = tagRegex.lastIndex;
       continue;
     }
 
-    const stackLast = stack.at(-1);
+    if (tagContent.startsWith("/")) {
+      stack.pop();
+    } else {
+      const isSelfClosing = tagContent.endsWith("/");
+      const cleanTag = isSelfClosing ? tagContent.slice(0, -1).trim() : tagContent.trim();
+      
+      const parts = cleanTag.match(/([^\s=]+)(?:="([^"]*)")?/g) || [];
+      const tagName = parts.shift();
+      const obj = { _tag: tagName, _children: [] };
 
-    if (isLabel) {
-
-      const obj = { _tag: values[0], _children: [] };
-      stack.push(obj);
-      stackLast._children.push(obj);
-
-      for (let j = 1; j < values.length - 1; j += 2) {
-        const property = values[j].split("=")[0].trim();
-        const value = values[j + 1];
-        obj[property] = value;
+      for (const part of parts) {
+        const eqIndex = part.indexOf('=');
+        if (eqIndex !== -1) {
+          const name = part.substring(0, eqIndex);
+          let value = part.substring(eqIndex + 1);
+          if (value.startsWith('"') && value.endsWith('"')) {
+            value = value.substring(1, value.length - 1);
+          }
+          obj[name] = value;
+        }
       }
 
-      if (closeImmediately) {
-        stack.pop();
-        continue;
+      stack.at(-1)._children.push(obj);
+      if (!isSelfClosing) {
+        stack.push(obj);
       }
-
-    } else if (tag) {
-      stackLast._children.push(tag);
     }
-
-  }
-
-  if (stack.length !== 1) {
-    console.warn(`Abnormal XML stack length (is ${stack.length}, should be 1)`);
+    lastIndex = tagRegex.lastIndex;
   }
 
   return stack[0]._children;
-
 };
 
 export default parseXML;

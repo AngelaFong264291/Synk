@@ -160,7 +160,12 @@ export function Documents() {
             <div className="row space-between gap-md wrap">
               <div>
                 <h2>{document.title}</h2>
-                <p>{document.currentContent.slice(0, 140) || "No content yet."}</p>
+                <div
+                  className="doc-preview"
+                  dangerouslySetInnerHTML={{
+                    __html: document.currentContent || "<p>No content yet.</p>",
+                  }}
+                />
               </div>
               <StatusPill
                 tone={document.visibility === "workspace" ? "accent" : "warning"}
