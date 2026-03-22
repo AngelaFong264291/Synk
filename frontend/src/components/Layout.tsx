@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { useActiveWorkspace } from "../lib/useActiveWorkspace";
+import synkLogo from "../assets/Synk Logo.png";
 import "./Layout.css";
 
 export function Layout() {
@@ -46,11 +47,11 @@ export function Layout() {
       <header className="app-header">
         <div className="header-left">
           <NavLink to="/" className="brand" end>
-            <span className="brand-mark">S</span>
-            <span>
-              Synk
-              <small>Hackathon MVP</small>
-            </span>
+            <img
+              src={synkLogo}
+              alt="Synk"
+              className="brand-mark"
+            />
           </NavLink>
           <nav className="nav">
             {isAuthenticated ? (
