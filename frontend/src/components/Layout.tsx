@@ -17,10 +17,6 @@ export function Layout() {
             </span>
           </NavLink>
           <nav className="nav">
-            <NavLink to="/" end>
-              Home
-            </NavLink>
-            <NavLink to="/about">About</NavLink>
             {isAuthenticated ? (
               <>
                 <NavLink to="/dashboard">Dashboard</NavLink>
@@ -29,7 +25,14 @@ export function Layout() {
                 <NavLink to="/tasks">Tasks</NavLink>
                 <NavLink to="/decisions">Decisions</NavLink>
               </>
-            ) : null}
+            ) : (
+              <>
+                <NavLink to="/" end>
+                  Home
+                </NavLink>
+                <NavLink to="/about">About</NavLink>
+              </>
+            )}
           </nav>
         </div>
         <div className="header-right">
