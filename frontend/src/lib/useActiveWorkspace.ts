@@ -32,6 +32,13 @@ function writeStoredWorkspaceId(workspaceId: string | null) {
   );
 }
 
+/** Avoid dispatching during a setState updater — it can trigger setState in other hooks mid-render. */
+function scheduleWriteStoredWorkspaceId(workspaceId: string | null) {
+  queueMicrotask(() => {
+    writeStoredWorkspaceId(workspaceId);
+  });
+}
+
 function pickNextActiveWorkspaceId(
   workspaces: WorkspaceRecord[],
   currentId: string | null,
@@ -66,7 +73,7 @@ export function useActiveWorkspace() {
     setActiveWorkspaceIdState((currentId) => {
       const candidateId =
         preferredActiveId ?? pickNextActiveWorkspaceId(deduped, currentId);
-      writeStoredWorkspaceId(candidateId);
+      scheduleWriteStoredWorkspaceId(candidateId);
       return candidateId;
     });
   }
@@ -154,8 +161,8 @@ export function useActiveWorkspace() {
     workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null;
 
   function setActiveWorkspaceId(workspaceId: string) {
-    writeStoredWorkspaceId(workspaceId);
     setActiveWorkspaceIdState(workspaceId);
+    scheduleWriteStoredWorkspaceId(workspaceId);
   }
 
   async function refresh() {
