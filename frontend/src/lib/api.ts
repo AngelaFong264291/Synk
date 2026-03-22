@@ -29,6 +29,9 @@ const DOCUMENT_VERSION_WITH_AUTHOR_EXPAND = {
   fields: "*",
 };
 
+/** PocketBase caps list `perPage` at 500; the JS SDK `getFullList` default `batch` is 1000. */
+const FULL_LIST_BATCH = 500;
+
 type SignUpInput = {
   email: string;
   password: string;
@@ -441,6 +444,7 @@ export async function listMyWorkspaces() {
     ownedTeams = await pb
       .collection(collections.teams)
       .getFullList<WorkspaceRecord>({
+        batch: FULL_LIST_BATCH,
         filter: pb.filter("owner = {:user}", { user: user.id }),
         sort: "name",
       });
@@ -454,6 +458,7 @@ export async function listMyWorkspaces() {
     ownedWorkspaces = await pb
       .collection(collections.workspaces)
       .getFullList<WorkspaceRecord>({
+        batch: FULL_LIST_BATCH,
         filter: pb.filter("owner = {:user}", { user: user.id }),
         sort: "name",
       });
@@ -469,6 +474,7 @@ export async function listMyWorkspaces() {
     memberships = await pb
       .collection(collections.teamMembers)
       .getFullList<WorkspaceMemberWithExpand>({
+        batch: FULL_LIST_BATCH,
         filter: pb.filter("user = {:user}", { user: user.id }),
         sort: "id",
         expand: "team,user",
@@ -481,6 +487,7 @@ export async function listMyWorkspaces() {
     memberships = await pb
       .collection(collections.workspaceMembers)
       .getFullList<WorkspaceMemberWithExpand>({
+        batch: FULL_LIST_BATCH,
         filter: pb.filter("user = {:user}", { user: user.id }),
         sort: "id",
         expand: "workspace,user",
@@ -621,6 +628,7 @@ export async function listWorkspaceMembers(workspaceId: string) {
     const members = await pb
       .collection(collections.teamMembers)
       .getFullList<WorkspaceMemberWithExpand>({
+        batch: FULL_LIST_BATCH,
         filter: pb.filter("team = {:workspace}", {
           workspace: workspaceId,
         }),
@@ -649,6 +657,7 @@ export async function listWorkspaceMembers(workspaceId: string) {
     const members = await pb
       .collection(collections.workspaceMembers)
       .getFullList<WorkspaceMemberWithExpand>({
+        batch: FULL_LIST_BATCH,
         filter: pb.filter("workspace = {:workspace}", {
           workspace: workspaceId,
         }),
@@ -696,6 +705,7 @@ export async function listWorkspaceDocuments(workspaceId: string) {
   const docs = await pb
     .collection(collections.documents)
     .getFullList<DocumentRecord>({
+      batch: FULL_LIST_BATCH,
       filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
       sort: "title",
       fields: "*",
@@ -716,6 +726,7 @@ export async function listWorkspaceDocumentsWithExpand(workspaceId: string) {
   const docs = await pb
     .collection(collections.documents)
     .getFullList<DocumentRecordWithExpand>({
+      batch: FULL_LIST_BATCH,
       filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
       sort: "title",
       ...DOCUMENT_WITH_OWNER_EXPAND,
@@ -789,6 +800,7 @@ export async function listDocumentVersions(documentId: string) {
   const versions = await pb
     .collection(collections.documentVersions)
     .getFullList<DocumentVersionRecord>({
+      batch: FULL_LIST_BATCH,
       filter: pb.filter("document = {:document}", { document: documentId }),
     });
 
@@ -807,6 +819,7 @@ export async function listDocumentVersionsWithExpand(documentId: string) {
   const versions = await pb
     .collection(collections.documentVersions)
     .getFullList<DocumentVersionRecordWithExpand>({
+      batch: FULL_LIST_BATCH,
       filter: pb.filter("document = {:document}", { document: documentId }),
       ...DOCUMENT_VERSION_WITH_AUTHOR_EXPAND,
     });
@@ -855,6 +868,7 @@ export async function listWorkspaceCommits(workspaceId: string) {
   const commits = await pb
     .collection(collections.workspaceCommits)
     .getFullList<WorkspaceCommitRecordWithExpand>({
+      batch: FULL_LIST_BATCH,
       filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
       expand: "author",
     });
@@ -868,6 +882,7 @@ export async function listWorkspaceTasks(workspaceId: string) {
   await getWorkspaceMembership(workspaceId);
 
   return pb.collection(collections.tasks).getFullList<TaskRecord>({
+    batch: FULL_LIST_BATCH,
     filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
     sort: "status,dueDate",
   });
@@ -877,6 +892,7 @@ export async function listWorkspaceTasksWithExpand(workspaceId: string) {
   await getWorkspaceMembership(workspaceId);
 
   return pb.collection(collections.tasks).getFullList<TaskRecordWithExpand>({
+    batch: FULL_LIST_BATCH,
     filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
     sort: "status,dueDate",
     expand: "assignee,document",
@@ -914,6 +930,7 @@ export async function listWorkspaceDecisions(workspaceId: string) {
   await getWorkspaceMembership(workspaceId);
 
   return pb.collection(collections.decisions).getFullList<DecisionRecord>({
+    batch: FULL_LIST_BATCH,
     filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
     sort: "-decidedAt",
   });
@@ -925,6 +942,7 @@ export async function listWorkspaceDecisionsWithExpand(workspaceId: string) {
   return pb
     .collection(collections.decisions)
     .getFullList<DecisionRecordWithExpand>({
+      batch: FULL_LIST_BATCH,
       filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
       sort: "-decidedAt",
       expand: "owner,linkedTask,linkedDocument",
@@ -991,6 +1009,7 @@ export async function getDocumentBundle(documentId: string) {
   const [versions, linkedTasks] = await Promise.all([
     listDocumentVersionsWithExpand(documentId),
     pb.collection(collections.tasks).getFullList<TaskRecordWithExpand>({
+      batch: FULL_LIST_BATCH,
       filter: pb.filter("document = {:document}", { document: documentId }),
       sort: "dueDate",
       expand: "assignee,document",
