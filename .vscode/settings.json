@@ -1,0 +1,16 @@
+{
+  "files.exclude": {
+    "**/pocketbase/pb_data": true,
+    "**/pocketbase/pb_data/**": true
+  },
+  "search.exclude": {
+    "**/pocketbase/pb_data": true,
+    "**/pocketbase/pb_data/**": true
+  },
+  "files.watcherExclude": {
+    "**/pocketbase/pb_data/**": true
+  },
+  "files.associations": {
+    "**/pocketbase/pb_data/types.d.ts": "plaintext"
+  }
+}

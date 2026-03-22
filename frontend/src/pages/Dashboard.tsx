@@ -1,13 +1,12 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
-import { pb } from "../lib/pocketbase";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill } from "../components/StatusPill";
+import { createDashboardSummary } from "../lib/summary";
 import { useActiveWorkspace } from "../lib/useActiveWorkspace";
 import type { DashboardViewModel } from "../lib/view-models";
 import { loadDashboardViewModel } from "../lib/view-models";
-import { createDashboardSummary } from "../lib/summary";
 
 export function Dashboard() {
   const { model } = useAuth();
@@ -164,6 +163,21 @@ export function Dashboard() {
   const { decisions, documents, members, tasks, workspace, source } = data;
   const openTasks = tasks.filter((task) => task.status !== "Done");
 
+  if (!data) {
+    return (
+      <section className="stack-lg">
+        <PageHeader
+          eyebrow="Dashboard"
+          title={`Welcome back, ${model?.email ?? "workspace member"}`}
+          description="Loading your workspace status, ownership board, decision log, and version history."
+        />
+      </section>
+    );
+  }
+
+  const { decisions, documents, members, tasks, workspace, source } = data;
+  const openTasks = tasks.filter((task) => task.status !== "Done");
+  const completedTasks = tasks.filter((task) => task.status === "Done");
   const summary = createDashboardSummary({
     workspace,
     documents,
@@ -171,99 +185,178 @@ export function Dashboard() {
     decisions,
     members,
   });
+  const totalSnapshots = documents.reduce(
+    (count, document) => count + document.versions.length,
+    0,
+  );
+  const dueTodayTasks = tasks.filter((task) => task.dueDate === "Today");
+  const recentSnapshot = documents
+    .flatMap((document) =>
+      document.versions.map((version) => ({
+        documentTitle: document.title,
+        label: version.label,
+        author: version.author,
+        createdAt: version.createdAt,
+      })),
+    )
+    .at(-1);
 
   return (
     <section className="stack-lg">
       <PageHeader
         eyebrow="Dashboard"
-        title={`Welcome back, ${model?.email ?? "teammate"}`}
-        description="This is the hackathon control center for progress, handoffs, and demo readiness."
+        title={`Welcome back, ${model?.email ?? "workspace member"}`}
+        description="A clearer PRD-aligned view of change tracking, task ownership, decision logging, and workspace momentum."
         actions={
           <div className="row gap-sm wrap">
             <Link className="button-link" to="/workspace">
-              Open workspace
+              Workspace
             </Link>
             <Link className="button-link button-link-secondary" to="/documents">
-              Review documents
+              Documents
+            </Link>
+            <Link className="button-link button-link-secondary" to="/tasks">
+              Tasks
             </Link>
           </div>
         }
       />
 
-      {source === "demo" ? (
-        <div className="panel">
-          <p className="muted">
-            Showing demo fallback data.
-          </p>
+      <section className="panel stack">
+        <div className="row space-between wrap gap-sm">
+          <div>
+            <p className="eyebrow">Workspace pulse</p>
+            <h2>{workspace.name}</h2>
+            <p className="dashboard-section-note">{summary.headline}</p>
+          </div>
+          <StatusPill tone={source === "live" ? "success" : "warning"}>
+            {source === "live" ? "Live PocketBase data" : "Demo fallback"}
+          </StatusPill>
+        </div>
+
+        <div className="meta-grid">
+          <span>{members.length} collaborators</span>
+          <span>{openTasks.length} open tasks</span>
+          <span>{decisions.length} logged decisions</span>
+          <span>Invite code {workspace.inviteCode}</span>
+        </div>
+
+        {source === "demo" ? (
           <p className="muted">
             {data.error
-              ? `Live PocketBase data failed to load: ${data.error}`
-              : "PocketBase collections and seed data are not available for this user yet."}
+              ? `Live workspace data failed to load: ${data.error}`
+              : "PocketBase data is not ready yet for this user, so the dashboard is showing seeded demo content."}
           </p>
-        </div>
-      ) : null}
+        ) : null}
+      </section>
 
       <div className="stats-grid">
-        <article className="stat-card">
-          <span className="stat-value">{documents.length}</span>
-          <p>Tracked documents</p>
+        <article className="stat-card dashboard-metric-card">
+          <span className="dashboard-kpi-label">Version History</span>
+          <strong className="stat-value">{totalSnapshots}</strong>
+          <p>Named snapshots across {documents.length} documents</p>
         </article>
-        <article className="stat-card">
-          <span className="stat-value">{openTasks.length}</span>
-          <p>Open tasks</p>
+        <article className="stat-card dashboard-metric-card">
+          <span className="dashboard-kpi-label">Task Ownership</span>
+          <strong className="stat-value">{openTasks.length}</strong>
+          <p>
+            Open tasks, with {dueTodayTasks.length} due today
+          </p>
         </article>
-        <article className="stat-card">
-          <span className="stat-value">{decisions.length}</span>
-          <p>Key decisions logged</p>
+        <article className="stat-card dashboard-metric-card">
+          <span className="dashboard-kpi-label">Decision Log</span>
+          <strong className="stat-value">{decisions.length}</strong>
+          <p>Structured decisions captured for the project</p>
+        </article>
+        <article className="stat-card dashboard-metric-card">
+          <span className="dashboard-kpi-label">Delivery Progress</span>
+          <strong className="stat-value">
+            {tasks.length ? Math.round((completedTasks.length / tasks.length) * 100) : 0}%
+          </strong>
+          <p>{completedTasks.length} of {tasks.length} tasks completed</p>
         </article>
       </div>
 
       <div className="two-column">
         <section className="panel stack">
           <div className="row space-between wrap">
-            <h2>Project summary</h2>
-            <StatusPill tone="accent">{workspace.focus}</StatusPill>
+            <h2>Version Control and Change Tracking</h2>
+            <Link to="/documents">Open documents</Link>
           </div>
-          <p>{summary.headline}</p>
-          {summary.narrative.map((sentence) => (
-            <p key={sentence} className="muted">
-              {sentence}
+
+          <div className="document-callout">
+            <strong>Latest snapshot</strong>
+            <p>
+              {recentSnapshot
+                ? `${recentSnapshot.label} on ${recentSnapshot.documentTitle}`
+                : "No snapshots yet"}
             </p>
-          ))}
+            <span className="muted">
+              {recentSnapshot
+                ? `${recentSnapshot.author} • ${recentSnapshot.createdAt}`
+                : "Create the first named snapshot from a document detail page."}
+            </span>
+          </div>
+
+          <div className="feature-checklist">
+            {documents.slice(0, 3).map((document) => (
+              <article key={document.id} className="feature-check">
+                <strong>{document.title}</strong>
+                <p>
+                  {document.versions.length} snapshot
+                  {document.versions.length === 1 ? "" : "s"} • {document.status}
+                </p>
+                <p className="muted">{document.owner}</p>
+              </article>
+            ))}
+          </div>
         </section>
 
         <section className="panel stack">
           <div className="row space-between wrap">
-            <h2>Recent decisions</h2>
-            <Link to="/decisions">Open log</Link>
+            <h2>Task and Ownership Management</h2>
+            <Link to="/tasks">Open task board</Link>
           </div>
-          {decisions.map((decision) => (
-            <div key={decision.id} className="list-row">
-              <div>
-                <strong>{decision.title}</strong>
-                <p>{decision.owner}</p>
-              </div>
-              <span className="muted">{decision.date}</span>
-            </div>
-          ))}
+
+          <div className="feature-checklist">
+            {openTasks.slice(0, 4).map((task) => (
+              <article key={task.id} className="feature-check">
+                <div className="row space-between wrap gap-sm">
+                  <strong>{task.title}</strong>
+                  <StatusPill
+                    tone={task.priority === "High" ? "warning" : "accent"}
+                  >
+                    {task.priority}
+                  </StatusPill>
+                </div>
+                <p>
+                  {task.assignee} • {task.status}
+                </p>
+                <p className="muted">
+                  {task.linkedDocument} • due {task.dueDate}
+                </p>
+              </article>
+            ))}
+          </div>
         </section>
       </div>
 
       <div className="two-column">
         <section className="panel stack">
           <div className="row space-between wrap">
-            <h2>Recent activity</h2>
-            <StatusPill tone="accent">Auto-generated</StatusPill>
+            <h2>Decision Logging</h2>
+            <Link to="/decisions">Open decision log</Link>
           </div>
-          {summary.recentActivity.map((item) => (
-            <article key={`${item.type}-${item.id}`} className="timeline-item">
+
+          {decisions.slice(0, 3).map((decision) => (
+            <article key={decision.id} className="timeline-item">
               <div className="row space-between wrap gap-sm">
-                <strong>{item.label}</strong>
-                <span className="muted">{item.timestamp}</span>
+                <strong>{decision.title}</strong>
+                <span className="muted">{decision.date}</span>
               </div>
-              <p>{item.detail}</p>
+              <p>{decision.outcome}</p>
               <p className="muted">
-                {item.actor} • {item.type}
+                {decision.owner} • linked to {decision.linkedTo}
               </p>
             </article>
           ))}
@@ -271,23 +364,22 @@ export function Dashboard() {
 
         <section className="panel stack">
           <div className="row space-between wrap">
-            <h2>Contributors</h2>
+            <h2>Workspace Accountability</h2>
             <StatusPill
               tone={summary.overdueTasks.length ? "warning" : "success"}
             >
-              {summary.overdueTasks.length
-                ? `${summary.overdueTasks.length} due today`
-                : "On track"}
+              {summary.overdueTasks.length ? "Needs follow-up" : "On track"}
             </StatusPill>
           </div>
+
           <div className="panel-list compact-grid">
             {summary.contributorStats.map((member) => (
               <article key={member.name} className="task-card">
-                <div className="row space-between gap-sm">
+                <div className="row space-between wrap gap-sm">
                   <strong>{member.name}</strong>
-                  <StatusPill tone="accent">
+                  <span className="dashboard-inline-stat">
                     {member.contributions} updates
-                  </StatusPill>
+                  </span>
                 </div>
                 <p>{member.focus}</p>
               </article>
@@ -401,6 +493,14 @@ export function Dashboard() {
           </form>
         </div>
       </section>
+
+          <div className="document-callout">
+            <strong>What to say in the demo</strong>
+            <p>{summary.narrative[0]}</p>
+            <span className="muted">{summary.narrative[1]}</span>
+          </div>
+        </section>
+      </div>
     </section>
   );
 }

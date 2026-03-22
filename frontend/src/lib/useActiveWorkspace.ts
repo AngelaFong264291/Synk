@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
-import { createWorkspace, joinWorkspaceByInviteCode, listMyWorkspaces } from "./api";
+import {
+  createWorkspace,
+  joinWorkspaceByInviteCode,
+  listMyWorkspaces,
+} from "./api";
 import { getCurrentUser } from "./api";
 import type { WorkspaceRecord } from "./types";
 
@@ -20,9 +24,9 @@ function writeStoredWorkspaceId(workspaceId: string | null) {
 
 export function useActiveWorkspace() {
   const [workspaces, setWorkspaces] = useState<WorkspaceRecord[]>([]);
-  const [activeWorkspaceId, setActiveWorkspaceIdState] = useState<string | null>(() =>
-    typeof window === "undefined" ? null : readStoredWorkspaceId(),
-  );
+  const [activeWorkspaceId, setActiveWorkspaceIdState] = useState<
+    string | null
+  >(() => (typeof window === "undefined" ? null : readStoredWorkspaceId()));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,9 +56,10 @@ export function useActiveWorkspace() {
         setWorkspaces(nextWorkspaces);
         setActiveWorkspaceIdState((currentId) => {
           const candidateId =
-            currentId && nextWorkspaces.some((workspace) => workspace.id === currentId)
+            currentId &&
+            nextWorkspaces.some((workspace) => workspace.id === currentId)
               ? currentId
-              : nextWorkspaces[0]?.id ?? null;
+              : (nextWorkspaces[0]?.id ?? null);
           writeStoredWorkspaceId(candidateId);
           return candidateId;
         });
@@ -95,9 +100,10 @@ export function useActiveWorkspace() {
     setWorkspaces(nextWorkspaces);
     setActiveWorkspaceIdState((currentId) => {
       const candidateId =
-        currentId && nextWorkspaces.some((workspace) => workspace.id === currentId)
+        currentId &&
+        nextWorkspaces.some((workspace) => workspace.id === currentId)
           ? currentId
-          : nextWorkspaces[0]?.id ?? null;
+          : (nextWorkspaces[0]?.id ?? null);
       writeStoredWorkspaceId(candidateId);
       return candidateId;
     });
@@ -106,6 +112,7 @@ export function useActiveWorkspace() {
   async function createWorkspaceAndSelect(input: {
     name: string;
     description?: string;
+    inviteCode: string;
   }) {
     const workspace = await createWorkspace(input);
     await refresh();

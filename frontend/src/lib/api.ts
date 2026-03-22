@@ -27,6 +27,7 @@ type SignUpInput = {
 type CreateWorkspaceInput = {
   name: string;
   description?: string;
+  inviteCode: string;
 };
 
 type CreateDocumentInput = {
@@ -86,32 +87,159 @@ function normalizeInviteCode(code: string) {
   return code.trim().toUpperCase();
 }
 
-function createInviteCode() {
-  return Math.random().toString(36).slice(2, 8).toUpperCase();
+function dedupeWorkspaces(workspaces: WorkspaceRecord[]) {
+  return [...new Map(workspaces.map((workspace) => [workspace.id, workspace])).values()];
 }
 
-async function getWorkspaceByInviteCode(inviteCode: string) {
-  return pb.collection(collections.workspaces).getFirstListItem<WorkspaceRecord>(
-    pb.filter("inviteCode = {:inviteCode}", {
-      inviteCode: normalizeInviteCode(inviteCode),
-    }),
+function isMissingCollectionError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("missing collection context") ||
+    message.includes("missing or invalid collection context") ||
+    message.includes("404") ||
+    message.includes("not found")
   );
 }
 
-async function getWorkspaceMembership(workspaceId: string, userId?: string) {
-  const currentUserId = userId ?? requireCurrentUser().id;
+async function getWorkspaceByInviteCode(inviteCode: string) {
+  const normalizedCode = normalizeInviteCode(inviteCode);
 
-  return pb
-    .collection(collections.workspaceMembers)
-    .getFirstListItem<WorkspaceMemberWithExpand>(
-      pb.filter("workspace = {:workspace} && user = {:user}", {
-        workspace: workspaceId,
-        user: currentUserId,
-      }),
-      {
-        expand: "workspace,user",
-      },
+  try {
+    return await pb
+      .collection(collections.teams)
+      .getFirstListItem<WorkspaceRecord>(
+        pb.filter("code = {:inviteCode}", {
+          inviteCode: normalizedCode,
+        }),
+      );
+  } catch (error: unknown) {
+    if (!isMissingCollectionError(error)) {
+      throw error;
+    }
+
+    return pb
+      .collection(collections.workspaces)
+      .getFirstListItem<WorkspaceRecord>(
+        pb.filter("inviteCode = {:inviteCode}", {
+          inviteCode: normalizedCode,
+        }),
+      );
+  }
+}
+
+async function getOwnedTeam(workspaceId: string, userId: string) {
+  try {
+    const team = await pb.collection(collections.teams).getOne<WorkspaceRecord>(workspaceId);
+    return team.owner === userId ? team : null;
+  } catch (error: unknown) {
+    if (!isMissingCollectionError(error)) {
+      throw error;
+    }
+
+    return null;
+  }
+}
+
+async function getOwnedWorkspace(workspaceId: string, userId: string) {
+  try {
+    const workspace = await pb
+      .collection(collections.workspaces)
+      .getOne<WorkspaceRecord>(workspaceId);
+    return workspace.owner === userId ? workspace : null;
+  } catch (error: unknown) {
+    if (!isMissingCollectionError(error)) {
+      throw error;
+    }
+
+    return null;
+  }
+}
+
+async function getUserById(userId: string) {
+  return pb.collection(collections.users).getOne<UserRecord>(userId);
+}
+
+function createOwnerMembership(
+  workspace: WorkspaceRecord,
+  user: UserRecord,
+): WorkspaceMemberWithExpand {
+  return {
+    id: `owner-${workspace.id}-${user.id}`,
+    collectionId: "",
+    collectionName: collections.workspaceMembers,
+    created: workspace.created,
+    updated: workspace.updated,
+    workspace: workspace.id,
+    team: workspace.id,
+    user: user.id,
+    role: "owner",
+    expand: {
+      workspace,
+      team: workspace,
+      user,
+    },
+  };
+}
+
+function getMembershipWorkspace(
+  membership: WorkspaceMemberWithExpand,
+) {
+  return membership.expand?.workspace ?? membership.expand?.team ?? null;
+}
+
+async function getWorkspaceMembership(workspaceId: string, userId?: string) {
+  const currentUser = userId ? null : requireCurrentUser();
+  const currentUserId = userId ?? currentUser!.id;
+  const ownedTeam = await getOwnedTeam(workspaceId, currentUserId);
+  const ownedWorkspace = await getOwnedWorkspace(workspaceId, currentUserId);
+
+  if (ownedTeam && ownedTeam.owner === currentUserId) {
+    return createOwnerMembership(
+      ownedTeam,
+      currentUser ?? (await getUserById(currentUserId)),
     );
+  }
+
+  if (ownedWorkspace && ownedWorkspace.owner === currentUserId) {
+    return createOwnerMembership(
+      ownedWorkspace,
+      currentUser ?? (await getUserById(currentUserId)),
+    );
+  }
+
+  try {
+    return await pb
+      .collection(collections.teamMembers)
+      .getFirstListItem<WorkspaceMemberWithExpand>(
+        pb.filter("team = {:workspace} && user = {:user}", {
+          workspace: workspaceId,
+          user: currentUserId,
+        }),
+        {
+          expand: "team,user",
+        },
+      );
+  } catch (error: unknown) {
+    if (!isMissingCollectionError(error)) {
+      throw error;
+    }
+
+    return pb
+      .collection(collections.workspaceMembers)
+      .getFirstListItem<WorkspaceMemberWithExpand>(
+        pb.filter("workspace = {:workspace} && user = {:user}", {
+          workspace: workspaceId,
+          user: currentUserId,
+        }),
+        {
+          expand: "workspace,user",
+        },
+      );
+  }
 }
 
 export async function signUp(input: SignUpInput) {
@@ -124,10 +252,9 @@ export async function signUp(input: SignUpInput) {
 }
 
 export async function signIn(email: string, password: string) {
-  return pb.collection(collections.users).authWithPassword<UserRecord>(
-    email,
-    password,
-  );
+  return pb
+    .collection(collections.users)
+    .authWithPassword<UserRecord>(email, password);
 }
 
 export function signOut() {
@@ -145,48 +272,103 @@ export async function getDefaultWorkspace() {
 
 export async function listMyWorkspaces() {
   const user = requireCurrentUser();
+  let ownedTeams: WorkspaceRecord[] = [];
+  let ownedWorkspaces: WorkspaceRecord[] = [];
 
-  const memberships = await pb
-    .collection(collections.workspaceMembers)
-    .getFullList<WorkspaceMemberWithExpand>({
-      filter: pb.filter("user = {:user}", { user: user.id }),
-      sort: "created",
-      expand: "workspace,user",
+  try {
+    ownedTeams = await pb.collection(collections.teams).getFullList<WorkspaceRecord>({
+      filter: pb.filter("owner = {:user}", { user: user.id }),
+      sort: "name",
     });
+  } catch (error: unknown) {
+    if (!isMissingCollectionError(error)) {
+      throw error;
+    }
+  }
 
-  return memberships
-    .map((membership) => membership.expand?.workspace)
+  try {
+    ownedWorkspaces = await pb
+      .collection(collections.workspaces)
+      .getFullList<WorkspaceRecord>({
+        filter: pb.filter("owner = {:user}", { user: user.id }),
+        sort: "name",
+      });
+  } catch (error: unknown) {
+    if (!isMissingCollectionError(error)) {
+      throw error;
+    }
+  }
+
+  let memberships: WorkspaceMemberWithExpand[];
+
+  try {
+    memberships = await pb
+      .collection(collections.teamMembers)
+      .getFullList<WorkspaceMemberWithExpand>({
+        filter: pb.filter("user = {:user}", { user: user.id }),
+        sort: "id",
+        expand: "team,user",
+      });
+  } catch (error: unknown) {
+    if (!isMissingCollectionError(error)) {
+      throw error;
+    }
+
+    memberships = await pb
+      .collection(collections.workspaceMembers)
+      .getFullList<WorkspaceMemberWithExpand>({
+        filter: pb.filter("user = {:user}", { user: user.id }),
+        sort: "id",
+        expand: "workspace,user",
+      });
+  }
+
+  const memberWorkspaces = memberships
+    .map((membership) => getMembershipWorkspace(membership))
     .filter((workspace): workspace is WorkspaceRecord => Boolean(workspace));
+
+  return dedupeWorkspaces([...ownedTeams, ...ownedWorkspaces, ...memberWorkspaces]);
 }
 
 export async function createWorkspace(input: CreateWorkspaceInput) {
   const user = requireCurrentUser();
+  const normalizedCode = normalizeInviteCode(input.inviteCode);
 
-  let workspace: WorkspaceRecord | null = null;
-  let lastError: unknown;
-
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    try {
-      workspace = await pb.collection(collections.workspaces).create<WorkspaceRecord>({
+  try {
+    const workspace = await pb
+      .collection(collections.teams)
+      .create<WorkspaceRecord>({
         name: input.name,
-        description: input.description,
         owner: user.id,
-        inviteCode: createInviteCode(),
+        code: normalizedCode,
       });
-      break;
-    } catch (error: unknown) {
-      lastError = error;
+
+    try {
+      await ensureWorkspaceMembership(workspace.id, "owner", user.id);
+    } catch {
+      // Legacy teams owners can still access their workspace via ownership fallback.
+    }
+    return workspace;
+  } catch (error: unknown) {
+    if (!isMissingCollectionError(error)) {
+      throw error;
     }
   }
 
-  if (!workspace) {
-    throw lastError instanceof Error
-      ? lastError
-      : new Error("Unable to create workspace");
+  const workspace = await pb
+    .collection(collections.workspaces)
+    .create<WorkspaceRecord>({
+      name: input.name,
+      description: input.description,
+      owner: user.id,
+      inviteCode: normalizedCode,
+    });
+
+  try {
+    await ensureWorkspaceMembership(workspace.id, "owner", user.id);
+  } catch {
+    // Owners can still access new workspaces via ownership fallback.
   }
-
-  await ensureWorkspaceMembership(workspace.id, "owner", user.id);
-
   return workspace;
 }
 
@@ -207,34 +389,102 @@ export async function ensureWorkspaceMembership(
   try {
     return await getWorkspaceMembership(workspaceId, resolvedUserId);
   } catch {
-    return pb
-      .collection(collections.workspaceMembers)
-      .create<WorkspaceMemberWithExpand>({
-        workspace: workspaceId,
-        user: resolvedUserId,
-        role,
-      });
+    try {
+      return await pb
+        .collection(collections.teamMembers)
+        .create<WorkspaceMemberWithExpand>({
+          team: workspaceId,
+          user: resolvedUserId,
+        });
+    } catch (error: unknown) {
+      if (!isMissingCollectionError(error)) {
+        throw error;
+      }
+
+      return pb
+        .collection(collections.workspaceMembers)
+        .create<WorkspaceMemberWithExpand>({
+          workspace: workspaceId,
+          user: resolvedUserId,
+          role,
+        });
+    }
   }
 }
 
 export async function listWorkspaceMembers(workspaceId: string) {
-  await getWorkspaceMembership(workspaceId);
+  const currentUser = requireCurrentUser();
+  const accessMembership = await getWorkspaceMembership(workspaceId, currentUser.id);
 
-  return pb
-    .collection(collections.workspaceMembers)
-    .getFullList<WorkspaceMemberWithExpand>({
-      filter: pb.filter("workspace = {:workspace}", {
-        workspace: workspaceId,
-      }),
-      sort: "created",
-      expand: "user,workspace",
-    });
+  try {
+    const members = await pb
+      .collection(collections.teamMembers)
+      .getFullList<WorkspaceMemberWithExpand>({
+        filter: pb.filter("team = {:workspace}", {
+          workspace: workspaceId,
+        }),
+        sort: "id",
+        expand: "user,team",
+      });
+
+    const ownerMembership =
+      accessMembership.role === "owner" &&
+      !members.some((member) => member.user === currentUser.id)
+        ? [
+            createOwnerMembership(
+              getMembershipWorkspace(accessMembership) ?? (await getWorkspace(workspaceId)),
+              currentUser,
+            ),
+          ]
+        : [];
+
+    return [...ownerMembership, ...members];
+  } catch (error: unknown) {
+    if (!isMissingCollectionError(error)) {
+      throw error;
+    }
+
+    const members = await pb
+      .collection(collections.workspaceMembers)
+      .getFullList<WorkspaceMemberWithExpand>({
+        filter: pb.filter("workspace = {:workspace}", {
+          workspace: workspaceId,
+        }),
+        sort: "id",
+        expand: "user,workspace",
+      });
+
+    const ownerMembership =
+      accessMembership.role === "owner" &&
+      !members.some((member) => member.user === currentUser.id)
+        ? [
+            createOwnerMembership(
+              getMembershipWorkspace(accessMembership) ?? (await getWorkspace(workspaceId)),
+              currentUser,
+            ),
+          ]
+        : [];
+
+    return [...ownerMembership, ...members];
+  }
 }
 
 export async function getWorkspace(workspaceId: string) {
   await getWorkspaceMembership(workspaceId);
 
-  return pb.collection(collections.workspaces).getOne<WorkspaceRecord>(workspaceId);
+  try {
+    return await pb
+      .collection(collections.teams)
+      .getOne<WorkspaceRecord>(workspaceId);
+  } catch (error: unknown) {
+    if (!isMissingCollectionError(error)) {
+      throw error;
+    }
+
+    return pb
+      .collection(collections.workspaces)
+      .getOne<WorkspaceRecord>(workspaceId);
+  }
 }
 
 export async function listWorkspaceDocuments(workspaceId: string) {
@@ -249,16 +499,18 @@ export async function listWorkspaceDocuments(workspaceId: string) {
 export async function listWorkspaceDocumentsWithExpand(workspaceId: string) {
   await getWorkspaceMembership(workspaceId);
 
-  return pb.collection(collections.documents).getFullList<DocumentRecordWithExpand>({
-    filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
-    sort: "-updated",
-    expand: "owner",
-  });
+  return pb
+    .collection(collections.documents)
+    .getFullList<DocumentRecordWithExpand>({
+      filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
+      sort: "-updated",
+      expand: "owner",
+    });
 }
 
 export async function createDocument(input: CreateDocumentInput) {
   const user = requireCurrentUser();
-  await getWorkspaceMembership(input.workspaceId, user.id);
+  await getWorkspaceMembership(input.workspaceId);
 
   const formData = new FormData();
   formData.append("workspace", input.workspaceId);
@@ -277,7 +529,10 @@ export async function createDocument(input: CreateDocumentInput) {
   return pb.collection(collections.documents).create<DocumentRecord>(formData);
 }
 
-export async function updateDocument(documentId: string, input: UpdateDocumentInput) {
+export async function updateDocument(
+  documentId: string,
+  input: UpdateDocumentInput,
+) {
   const current = await pb
     .collection(collections.documents)
     .getOne<DocumentRecord>(documentId);
@@ -300,6 +555,9 @@ export async function updateDocument(documentId: string, input: UpdateDocumentIn
   return pb
     .collection(collections.documents)
     .update<DocumentRecord>(documentId, formData);
+  return pb
+    .collection(collections.documents)
+    .update<DocumentRecord>(documentId, input);
 }
 
 export async function listDocumentVersions(documentId: string) {
@@ -309,10 +567,12 @@ export async function listDocumentVersions(documentId: string) {
 
   await getWorkspaceMembership(document.workspace);
 
-  return pb.collection(collections.documentVersions).getFullList<DocumentVersionRecord>({
-    filter: pb.filter("document = {:document}", { document: documentId }),
-    sort: "-created",
-  });
+  return pb
+    .collection(collections.documentVersions)
+    .getFullList<DocumentVersionRecord>({
+      filter: pb.filter("document = {:document}", { document: documentId }),
+      sort: "-created",
+    });
 }
 
 export async function listDocumentVersionsWithExpand(documentId: string) {
@@ -337,7 +597,7 @@ export async function createDocumentVersion(input: CreateVersionInput) {
     .collection(collections.documents)
     .getOne<DocumentRecord>(input.documentId);
 
-  await getWorkspaceMembership(document.workspace, user.id);
+  await getWorkspaceMembership(document.workspace);
 
   const previousContent = document.currentContent;
   const createdVersion = await pb
@@ -354,7 +614,9 @@ export async function createDocumentVersion(input: CreateVersionInput) {
     return createdVersion;
   } catch (error: unknown) {
     try {
-      await pb.collection(collections.documentVersions).delete(createdVersion.id);
+      await pb
+        .collection(collections.documentVersions)
+        .delete(createdVersion.id);
       await updateDocument(document.id, { currentContent: previousContent });
     } catch {
       // Best-effort rollback only; preserve the original error below.
@@ -369,7 +631,7 @@ export async function listWorkspaceTasks(workspaceId: string) {
 
   return pb.collection(collections.tasks).getFullList<TaskRecord>({
     filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
-    sort: "dueDate",
+    sort: "status,dueDate",
   });
 }
 
@@ -378,7 +640,7 @@ export async function listWorkspaceTasksWithExpand(workspaceId: string) {
 
   return pb.collection(collections.tasks).getFullList<TaskRecordWithExpand>({
     filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
-    sort: "dueDate",
+    sort: "status,dueDate",
     expand: "assignee,document",
   });
 }
@@ -398,7 +660,9 @@ export async function createTask(input: CreateTaskInput) {
 }
 
 export async function updateTask(taskId: string, input: UpdateTaskInput) {
-  const current = await pb.collection(collections.tasks).getOne<TaskRecord>(taskId);
+  const current = await pb
+    .collection(collections.tasks)
+    .getOne<TaskRecord>(taskId);
   await getWorkspaceMembership(current.workspace);
 
   return pb.collection(collections.tasks).update<TaskRecord>(taskId, input);
@@ -420,16 +684,18 @@ export async function listWorkspaceDecisions(workspaceId: string) {
 export async function listWorkspaceDecisionsWithExpand(workspaceId: string) {
   await getWorkspaceMembership(workspaceId);
 
-  return pb.collection(collections.decisions).getFullList<DecisionRecordWithExpand>({
-    filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
-    sort: "-decidedAt",
-    expand: "owner,linkedTask,linkedDocument",
-  });
+  return pb
+    .collection(collections.decisions)
+    .getFullList<DecisionRecordWithExpand>({
+      filter: pb.filter("workspace = {:workspace}", { workspace: workspaceId }),
+      sort: "-decidedAt",
+      expand: "owner,linkedTask,linkedDocument",
+    });
 }
 
 export async function createDecision(input: CreateDecisionInput) {
   const user = requireCurrentUser();
-  await getWorkspaceMembership(input.workspaceId, user.id);
+  await getWorkspaceMembership(input.workspaceId);
 
   return pb.collection(collections.decisions).create<DecisionRecord>({
     workspace: input.workspaceId,
@@ -443,7 +709,9 @@ export async function createDecision(input: CreateDecisionInput) {
   });
 }
 
-export async function getDashboardSnapshot(workspaceId: string): Promise<DashboardSnapshot> {
+export async function getDashboardSnapshot(
+  workspaceId: string,
+): Promise<DashboardSnapshot> {
   await getWorkspaceMembership(workspaceId);
 
   const documents = await listWorkspaceDocumentsWithExpand(workspaceId);
@@ -458,13 +726,12 @@ export async function getDashboardSnapshot(workspaceId: string): Promise<Dashboa
         .sort((left, right) => right.created.localeCompare(left.created))
     : [];
 
-  const [workspace, members, tasks, recentDecisions] =
-    await Promise.all([
-      getWorkspace(workspaceId),
-      listWorkspaceMembers(workspaceId),
-      listWorkspaceTasks(workspaceId),
-      listWorkspaceDecisions(workspaceId),
-    ]);
+  const [workspace, members, tasks, recentDecisions] = await Promise.all([
+    getWorkspace(workspaceId),
+    listWorkspaceMembers(workspaceId),
+    listWorkspaceTasks(workspaceId),
+    listWorkspaceDecisions(workspaceId),
+  ]);
 
   return {
     workspace,
@@ -502,8 +769,9 @@ export async function getDocumentBundle(documentId: string) {
 }
 
 export async function getWorkspaceDashboardBundle(workspaceId?: string) {
-  const targetWorkspace =
-    workspaceId ? await getWorkspace(workspaceId) : await getDefaultWorkspace();
+  const targetWorkspace = workspaceId
+    ? await getWorkspace(workspaceId)
+    : await getDefaultWorkspace();
 
   if (!targetWorkspace) {
     throw new Error("No workspace found for current user");

@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { getDocumentBundle } from "../lib/api";
+import { useEffect, useMemo, useState, type SubmitEvent } from "react";
+import { Link, useParams } from "react-router-dom";
+import {
+  createDocumentVersion,
+  listDocumentVersions,
+  listWorkspaceDocuments,
+  updateDocument,
+} from "../lib/api";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill } from "../components/StatusPill";
 import { pb } from "../lib/pocketbase";
@@ -77,6 +85,9 @@ export function DocumentDetail() {
   const [bundle, setBundle] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pendingSave, setPendingSave] = useState<"draft" | "snapshot" | null>(
+    null,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -92,6 +103,18 @@ export function DocumentDetail() {
         if (!cancelled) {
           setBundle(nextBundle);
         }
+
+        const nextDocument =
+          documents.find((entry) => entry.id === currentDocumentId) ?? null;
+
+        setDocument(nextDocument);
+        setVersions(nextVersions);
+        setLeftVersionId("");
+        setRightVersionId("");
+        setContentDraft(nextDocument?.currentContent ?? "");
+        setSnapshotName(
+          nextVersions[0] ? `${versionLabel(nextVersions[0])} follow-up` : "",
+        );
       } catch (loadError: unknown) {
         if (!cancelled) {
           setError(
@@ -113,6 +136,35 @@ export function DocumentDetail() {
       cancelled = true;
     };
   }, [documentId]);
+  }, [activeWorkspace, documentId]);
+
+  const [leftVersionId, setLeftVersionId] = useState("");
+  const [rightVersionId, setRightVersionId] = useState("");
+  const effectiveLeftVersionId =
+    leftVersionId || versions[versions.length - 1]?.id || "";
+  const effectiveRightVersionId = rightVersionId || versions[0]?.id || "";
+
+  const leftVersion = useMemo(
+    () =>
+      versions.find((version) => version.id === effectiveLeftVersionId) ??
+      versions[versions.length - 1],
+    [effectiveLeftVersionId, versions],
+  );
+  const rightVersion = useMemo(
+    () =>
+      versions.find((version) => version.id === effectiveRightVersionId) ??
+      versions[0],
+    [effectiveRightVersionId, versions],
+  );
+  const diffLines = useMemo(
+    () =>
+      buildLineDiff(leftVersion?.content ?? "", rightVersion?.content ?? ""),
+    [leftVersion?.content, rightVersion?.content],
+  );
+  const diffStats = useMemo(() => getDiffStats(diffLines), [diffLines]);
+
+  async function onSaveDraft(event: SubmitEvent<HTMLFormElement>) {
+    event.preventDefault();
 
   if (loading) {
     return <p className="muted">Loading document...</p>;
@@ -120,10 +172,63 @@ export function DocumentDetail() {
 
   if (error) {
     return <p className="error">{error}</p>;
+    setPendingSave("draft");
+    setError(null);
+
+    try {
+      const updatedDocument = await updateDocument(document.id, {
+        currentContent: contentDraft,
+      });
+      setDocument(updatedDocument);
+    } catch (saveError: unknown) {
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Unable to save document",
+      );
+    } finally {
+      setPendingSave(null);
+    }
   }
 
   if (!bundle) {
     return <p className="muted">Document not found.</p>;
+  async function onCreateSnapshot(event: SubmitEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!document || !snapshotName) {
+      return;
+    }
+
+    setPendingSave("snapshot");
+    setError(null);
+
+    try {
+      const createdVersion = await createDocumentVersion({
+        documentId: document.id,
+        versionName: snapshotName,
+        content: contentDraft,
+      });
+      setDocument((current) =>
+        current
+          ? {
+              ...current,
+              currentContent: contentDraft,
+            }
+          : current,
+      );
+      setVersions((current) => [createdVersion, ...current]);
+      setRightVersionId(createdVersion.id);
+      setSnapshotName(`${snapshotName} v2`);
+    } catch (snapshotError: unknown) {
+      setError(
+        snapshotError instanceof Error
+          ? snapshotError.message
+          : "Unable to create snapshot",
+      );
+    } finally {
+      setPendingSave(null);
+    }
   }
 
   return (
@@ -141,7 +246,7 @@ export function DocumentDetail() {
             <code style={{ background: "#eee", padding: "0.2rem 0.4rem", borderRadius: "4px", flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>
               {getRawFileUrl(bundle.document)}
             </code>
-            <button 
+            <button
               className="button-sm"
               onClick={() => {
                 const url = getRawFileUrl(bundle.document);

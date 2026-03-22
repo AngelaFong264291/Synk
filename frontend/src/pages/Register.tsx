@@ -1,45 +1,36 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { useLocation, useNavigate, type Location } from "react-router-dom";
 import { useState, type SubmitEvent } from "react";
-import {
-  Link,
-  useLocation,
-  useNavigate,
-  type Location,
-} from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { pb } from "../lib/pocketbase";
-import { useAuth } from "../auth/useAuth";
 
-export function Login() {
+export function Register() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const { isAuthenticated } = useAuth();
-  const state = location.state as { from?: Location } | null | undefined;
-  const from = state?.from?.pathname ?? "/dashboard";
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      navigate(from, { replace: true });
-    }
-  }, [isAuthenticated, navigate, from]);
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
   async function onSubmit(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    if (password !== passwordConfirm) {
+      setError("Passwords do not match.");
+      return;
+    }
     setPending(true);
     try {
+      await pb.collection("users").create({
+        email,
+        password,
+        passwordConfirm,
+      });
       await pb.collection("users").authWithPassword(email, password);
-      navigate(from, { replace: true });
+      navigate("/dashboard", { replace: true });
     } catch (err: unknown) {
       const message =
         err && typeof err === "object" && "message" in err
           ? String((err as { message: string }).message)
-          : "Sign in failed";
+          : "Could not create account";
       setError(message);
     } finally {
       setPending(false);
@@ -51,23 +42,22 @@ export function Login() {
       <div className="page-header">
         <div>
           <p className="eyebrow">Authentication</p>
-          <h1>Sign in to your workspace</h1>
+          <h1>Create your account</h1>
           <p className="page-description">
-            Use your PocketBase user account to open the hackathon dashboard and
-            continue the shared demo flow.
+            Register with email and password. You will be signed in and taken to
+            the dashboard.
           </p>
         </div>
       </div>
       <p className="muted">
-        New here? <Link to="/register">Create an account</Link> — or sign in
-        below.
+        Already have an account? <Link to="/login">Sign in</Link>
       </p>
       <form className="stack form" onSubmit={onSubmit}>
         <label className="field">
           <span>Email</span>
           <input
             type="email"
-            autoComplete="username"
+            autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -77,15 +67,27 @@ export function Login() {
           <span>Password</span>
           <input
             type="password"
-            autoComplete="current-password"
+            autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            minLength={8}
+          />
+        </label>
+        <label className="field">
+          <span>Confirm password</span>
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={passwordConfirm}
+            onChange={(e) => setPasswordConfirm(e.target.value)}
+            required
+            minLength={8}
           />
         </label>
         {error ? <p className="error">{error}</p> : null}
         <button type="submit" disabled={pending}>
-          {pending ? "Signing in..." : "Sign in"}
+          {pending ? "Creating account…" : "Create account"}
         </button>
       </form>
     </section>

@@ -1,5 +1,8 @@
 export const collections = {
   users: "users",
+  teams: "teams",
+  teamMembers: "team_members",
+  teamInvites: "team_invites",
   workspaces: "workspaces",
   workspaceMembers: "workspace_members",
   documents: "documents",
@@ -31,20 +34,23 @@ export type UserRecord = BaseRecord & {
 
 export type WorkspaceRecord = BaseRecord & {
   name: string;
-  inviteCode: string;
+  inviteCode?: string;
+  code?: string;
   owner: string;
   description?: string;
 };
 
 export type WorkspaceMemberRecord = BaseRecord & {
-  workspace: string;
+  workspace?: string;
+  team?: string;
   user: string;
-  role: WorkspaceRole;
+  role?: WorkspaceRole;
 };
 
 export type WorkspaceMemberWithExpand = WorkspaceMemberRecord & {
   expand?: {
     workspace?: WorkspaceRecord;
+    team?: WorkspaceRecord;
     user?: UserRecord;
   };
 };

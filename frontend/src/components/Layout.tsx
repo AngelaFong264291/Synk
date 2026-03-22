@@ -20,7 +20,7 @@ export function Layout() {
             {isAuthenticated ? (
               <>
                 <NavLink to="/dashboard">Dashboard</NavLink>
-                <NavLink to="/workspace">Workspace</NavLink>
+                <NavLink to="/workspace">Workspaces</NavLink>
                 <NavLink to="/documents">Documents</NavLink>
                 <NavLink to="/tasks">Tasks</NavLink>
                 <NavLink to="/decisions">Decisions</NavLink>
@@ -42,14 +42,26 @@ export function Layout() {
                 <span className="user-chip-dot" />
                 <span>{model?.email ?? "Signed in"}</span>
               </div>
-              <button type="button" className="linkish" onClick={signOut}>
+              <button
+                type="button"
+                className="button-link button-link-secondary header-sign-out"
+                onClick={signOut}
+              >
                 Sign out
               </button>
             </>
           ) : (
-            <NavLink to="/login" className="button-link">
-              Sign in
-            </NavLink>
+            <>
+              <NavLink
+                to="/register"
+                className="button-link button-link-secondary"
+              >
+                Sign up
+              </NavLink>
+              <NavLink to="/login" className="button-link">
+                Sign in
+              </NavLink>
+            </>
           )}
         </div>
       </header>

@@ -11,7 +11,7 @@ export function Home() {
         <div className="stack">
           <p className="eyebrow">Hackathon collaboration OS</p>
           <h1>
-            Synk gives your team one place to track changes, ownership, and
+            Synk gives your workspace one place to track changes, ownership, and
             decisions.
           </h1>
           <p className="hero-copy">
@@ -33,7 +33,7 @@ export function Home() {
           <h2>{workspace.name}</h2>
           <p>{workspace.milestone}</p>
           <div className="meta-grid">
-            <span>{members.length} teammates</span>
+            <span>{members.length} workspace members</span>
             <span>{tasks.length} active tasks</span>
             <span>Invite code {workspace.inviteCode}</span>
           </div>

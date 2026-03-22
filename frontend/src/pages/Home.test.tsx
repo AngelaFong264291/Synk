@@ -12,7 +12,7 @@ describe("Home", () => {
     );
     expect(
       screen.getByRole("heading", {
-        name: /synk gives your team one place to track changes/i,
+        name: /synk gives your workspace one place to track changes/i,
       }),
     ).toBeInTheDocument();
   });
