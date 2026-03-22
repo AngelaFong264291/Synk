@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { useState, type FormEvent } from "react";
 import { useAuth } from "../auth/useAuth";
 import { pb } from "../lib/pocketbase";
 import { PageHeader } from "../components/PageHeader";
